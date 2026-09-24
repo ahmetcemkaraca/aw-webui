@@ -27,7 +27,7 @@ div
   div(v-if="!host")
     b-alert(show variant="info")
       | No host with window/AFK buckets available. Install
-      | #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") aw-watcher-window and aw-watcher-afk]
+      | the window and idle collectors
       | to use this view.
 
   div(v-else-if="loading")

@@ -4,21 +4,26 @@ div(:class="{'fixed-top-padding': fixedTopMenu}")
     // Brand on mobile
     b-navbar-nav.d-block.d-lg-none
       b-navbar-brand(to="/" style="background-color: transparent;")
-        img.aligh-middle(src="/logo.png" style="height: 1.5em;")
-        span.ml-2.align-middle(style="font-size: 1em; color: #000;") ActivityWatch
+        img.aligh-middle(src="/peakactivity.svg" alt="" style="height: 1.5em;")
+        span.ml-2.align-middle(style="font-size: 1em; color: #000;") PeakActivity
 
     b-navbar-toggle(target="nav-collapse")
 
-    b-collapse#nav-collapse(is-nav)
+      b-collapse#nav-collapse(is-nav)
       b-navbar-nav
+        b-nav-item(v-if="isShipped('web-interface')" to="/home")
+          div.px-2.px-lg-1
+            | Home / Today
+            small.ml-1.text-muted(v-if="statusLabel('web-interface')") ({{ statusLabel('web-interface') }})
+
         // If only a single view (the default) is available
-        b-nav-item(v-if="activityViews && activityViews.length === 1", v-for="view in activityViews", :key="view.name", :to="view.pathUrl")
+        b-nav-item(v-if="isShipped('web-interface') && activityViews && activityViews.length === 1", v-for="view in activityViews", :key="view.name", :to="view.pathUrl")
           div.px-2.px-lg-1
             icon(name="calendar-day")
             | Activity
 
         // If multiple (or no) activity views are available
-        b-nav-item-dropdown(v-if="!activityViews || activityViews.length !== 1")
+        b-nav-item-dropdown(v-if="isShipped('web-interface') && (!activityViews || activityViews.length !== 1)")
           template(slot="button-content")
             div.d-inline.px-2.px-lg-1
               icon(name="calendar-day")
@@ -34,34 +39,42 @@ div(:class="{'fixed-top-padding': fixedTopMenu}")
             icon(:name="view.icon")
             | {{ view.name }}
 
-        b-nav-item(to="/timeline" style="font-color: #000;")
+        b-nav-item(v-if="isShipped('web-interface')" to="/timeline" style="font-color: #000;")
           div.px-2.px-lg-1
             icon(name="stream")
             | Timeline
+            small.ml-1.text-muted(v-if="statusLabel('web-interface')") ({{ statusLabel('web-interface') }})
 
-        b-nav-item(to="/stopwatch")
+        b-nav-item(v-if="isShipped('manual-time-entry')" to="/stopwatch")
           div.px-2.px-lg-1
             icon(name="stopwatch")
             | Stopwatch
+            small.ml-1.text-muted(v-if="statusLabel('manual-time-entry')") ({{ statusLabel('manual-time-entry') }})
 
       // Brand on large screens (centered)
       b-navbar-nav.abs-center.d-none.d-lg-block
         b-navbar-brand(to="/" style="background-color: transparent;")
-          img.ml-0.aligh-middle(src="/logo.png" style="height: 1.5em;")
-          span.ml-2.align-middle(style="font-size: 1.0em; color: #000;") ActivityWatch
+          img.ml-0.aligh-middle(src="/peakactivity.svg" alt="" style="height: 1.5em;")
+          span.ml-2.align-middle(style="font-size: 1.0em; color: #000;") PeakActivity
 
       b-navbar-nav.ml-auto
-        b-nav-item-dropdown
+        b-nav-item-dropdown(v-if="isShipped('web-interface')")
           template(slot="button-content")
             div.d-inline.px-2.px-lg-1
               icon(name="tools")
               | Tools
-          b-dropdown-item(to="/search")
+          b-dropdown-item(v-if="isShipped('local-api')" to="/search")
             icon(name="search")
             | Search
-          b-dropdown-item(to="/work-report")
+            small.ml-1.text-muted(v-if="statusLabel('local-api')") ({{ statusLabel('local-api') }})
+          b-dropdown-item(v-if="isShipped('insights-reports')" to="/work-report")
             icon(name="briefcase")
             | Work Report
+            small.ml-1.text-muted(v-if="statusLabel('insights-reports')") ({{ statusLabel('insights-reports') }})
+          b-dropdown-item(to="/freelancer")
+            icon(name="briefcase")
+            | Freelancer
+            small.ml-1.text-muted(v-if="statusLabel('freelancer-workspace')") ({{ statusLabel('freelancer-workspace') }})
           b-dropdown-item(to="/trends" v-if="devmode")
             icon(name="chart-line")
             | Trends
@@ -70,7 +83,8 @@ div(:class="{'fixed-top-padding': fixedTopMenu}")
             | Report
           b-dropdown-item(to="/alerts" v-if="devmode")
             icon(name="flag-checkered")
-            | Alerts
+            | Category goals
+            small.ml-1.text-muted(v-if="statusLabel('deterministic-rules')") ({{ statusLabel('deterministic-rules') }})
           b-dropdown-item(to="/timespiral" v-if="devmode")
             icon(name="history")
             | Timespiral
@@ -82,14 +96,16 @@ div(:class="{'fixed-top-padding': fixedTopMenu}")
             icon(name="project-diagram")
             | Graph
 
-        b-nav-item(to="/buckets")
+        b-nav-item(v-if="isShipped('local-api')" to="/buckets")
           div.px-2.px-lg-1
             icon(name="database")
             | Raw Data
-        b-nav-item(to="/settings")
+            small.ml-1.text-muted(v-if="statusLabel('local-api')") ({{ statusLabel('local-api') }})
+        b-nav-item(v-if="isShipped('web-interface')" to="/settings")
           div.px-2.px-lg-1
             icon(name="cog")
             | Settings
+            small.ml-1.text-muted(v-if="statusLabel('web-interface')") ({{ statusLabel('web-interface') }})
 </template>
 
 <style lang="scss" scoped>
@@ -130,6 +146,8 @@ import { mapState } from 'pinia';
 import { useSettingsStore } from '~/stores/settings';
 import { useBucketsStore } from '~/stores/buckets';
 import { IBucket } from '~/util/interfaces';
+import experience from '~/generated/product-experience.json';
+import { isShipped as capabilityIsShipped, statusLabel as capabilityStatusLabel } from '~/product/experience';
 
 export default {
   name: 'Header',
@@ -142,6 +160,10 @@ export default {
   },
   computed: {
     ...mapState(useSettingsStore, ['devmode']),
+  },
+  methods: {
+    isShipped(id: string): boolean { return capabilityIsShipped(id, experience); },
+    statusLabel(id: string): string { return capabilityStatusLabel(id, experience); },
   },
   mounted: async function () {
     const bucketStore = useBucketsStore();

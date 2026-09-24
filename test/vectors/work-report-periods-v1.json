@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "input": {
+    "aggregate_days": [
+      {
+        "date": "2026-05-30",
+        "duration": 10,
+        "sessions": 1,
+        "avgSession": 10,
+        "events": [{ "duration": 10, "data": {} }]
+      },
+      { "date": "2026-05-31", "duration": 0, "sessions": 0, "avgSession": 0, "events": [] },
+      {
+        "date": "2026-06-01",
+        "duration": 30,
+        "sessions": 2,
+        "avgSession": 15,
+        "events": [
+          { "duration": 15, "data": {} },
+          { "duration": 15, "data": {} }
+        ]
+      },
+      {
+        "date": "2026-06-02",
+        "duration": 5,
+        "sessions": 1,
+        "avgSession": 5,
+        "events": [{ "duration": 5, "data": {} }]
+      }
+    ],
+    "current": [
+      {
+        "date": "2026-06-01",
+        "duration": 100,
+        "sessions": 1,
+        "avgSession": 100,
+        "events": [
+          {
+            "timestamp": "2026-06-01T08:00:00Z",
+            "duration": 100,
+            "data": {
+              "app": "Editor",
+              "title": "Private title",
+              "url": "https://example.com/project?token=synthetic",
+              "project": "Alpha",
+              "$category": ["Work"],
+              "status": "not-afk"
+            }
+          }
+        ]
+      },
+      { "date": "2026-06-02", "duration": 0, "sessions": 0, "avgSession": 0, "events": [] },
+      {
+        "date": "2026-06-03",
+        "duration": 50,
+        "sessions": 1,
+        "avgSession": 50,
+        "events": [
+          {
+            "timestamp": "2026-06-03T08:00:00Z",
+            "duration": 50,
+            "data": {
+              "app": "Browser",
+              "title": "Another private title",
+              "url": "https://example.org/private",
+              "project": "Beta",
+              "$category": ["Personal"],
+              "status": "afk"
+            }
+          }
+        ]
+      }
+    ],
+    "previous": [
+      {
+        "date": "2026-05-25",
+        "duration": 40,
+        "sessions": 1,
+        "avgSession": 40,
+        "events": [{ "duration": 40, "data": {} }]
+      },
+      {
+        "date": "2026-05-26",
+        "duration": 40,
+        "sessions": 1,
+        "avgSession": 40,
+        "events": [{ "duration": 40, "data": {} }]
+      },
+      {
+        "date": "2026-05-27",
+        "duration": 0,
+        "sessions": 1,
+        "avgSession": 0,
+        "events": [{ "duration": 0, "data": {} }]
+      }
+    ]
+  },
+  "expected": {
+    "weekly": [
+      {
+        "method_id": "work-time-calendar-aggregate",
+        "method_version": 1,
+        "unit": "week",
+        "period": "2026-W22",
+        "start_date": "2026-05-30",
+        "end_date": "2026-05-31",
+        "days": 2,
+        "days_with_events": 1,
+        "duration": 10,
+        "sessions": 1
+      },
+      {
+        "method_id": "work-time-calendar-aggregate",
+        "method_version": 1,
+        "unit": "week",
+        "period": "2026-W23",
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-02",
+        "days": 2,
+        "days_with_events": 2,
+        "duration": 35,
+        "sessions": 3
+      }
+    ],
+    "monthly": [
+      {
+        "method_id": "work-time-calendar-aggregate",
+        "method_version": 1,
+        "unit": "month",
+        "period": "2026-05",
+        "start_date": "2026-05-30",
+        "end_date": "2026-05-31",
+        "days": 2,
+        "days_with_events": 1,
+        "duration": 10,
+        "sessions": 1
+      },
+      {
+        "method_id": "work-time-calendar-aggregate",
+        "method_version": 1,
+        "unit": "month",
+        "period": "2026-06",
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-02",
+        "days": 2,
+        "days_with_events": 2,
+        "duration": 35,
+        "sessions": 3
+      }
+    ],
+    "comparison": {
+      "method_id": "work-time-period-comparison",
+      "method_version": 1,
+      "current": {
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-03",
+        "periods": 3,
+        "periods_with_events": 2,
+        "observed_events": 2,
+        "duration": 150
+      },
+      "previous": {
+        "start_date": "2026-05-25",
+        "end_date": "2026-05-27",
+        "periods": 3,
+        "periods_with_events": 3,
+        "observed_events": 3,
+        "duration": 80
+      },
+      "duration_change": 70,
+      "duration_change_percent": 87.5,
+      "coverage_note": "Current period has fewer observed events (2 vs 3)."
+    },
+    "fields": {
+      "method_id": "work-time-field-summary",
+      "method_version": 1,
+      "project": [
+        { "label": "Alpha", "duration": 100, "sessions": 1 },
+        { "label": "Beta", "duration": 50, "sessions": 1 }
+      ],
+      "app": [
+        { "label": "Editor", "duration": 100, "sessions": 1 },
+        { "label": "Browser", "duration": 50, "sessions": 1 }
+      ],
+      "domain": [
+        { "label": "example.com", "duration": 100, "sessions": 1 },
+        { "label": "example.org", "duration": 50, "sessions": 1 }
+      ],
+      "active_away": { "active_duration": 100, "away_duration": 50 }
+    }
+  }
+}

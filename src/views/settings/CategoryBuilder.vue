@@ -39,9 +39,10 @@ div
   div(v-else-if="!queryOptions.hostname")
     p.text-muted.mb-0
       | No host with window/AFK buckets is available. Install
-      | #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") a watcher]
+      | a collector
       | to start collecting data.
   div(v-else)
+    p.small.text-danger(v-if="ignoreError" role="alert") {{ ignoreError }}
     div(v-if="words_by_duration.length == 0")
       | No words with significant duration. You're good to go!
     div(v-else)
@@ -64,9 +65,22 @@ div
             table.table.table-sm.table-striped
               tr
                 th Title
+                th Rule explanation
                 th.text-right Duration
               tr(v-for="event in showing_events[1]")
                 td {{ event.data.title }}
+                td
+                  template(v-if="event.data.$category_trace")
+                    strong(v-if="event.data.$category_trace.outcome === 'matched'")
+                      | Selected: {{ event.data.$category_trace.selected_category.join(' > ') }}
+                    strong(v-else) Could not determine
+                    ul.mb-0(v-if="event.data.$category_trace.matched_rules.length")
+                      li(v-for="match in event.data.$category_trace.matched_rules" :key="match.rule_index")
+                        | Rule {{ match.rule_index + 1 }} matched {{ match.category_path.join(' > ') }}
+                    small.d-block.text-muted(v-if="event.data.$category_trace.selected_rule_index !== null")
+                      | Deepest match wins; later rules win ties. Selected rule {{ event.data.$category_trace.selected_rule_index + 1 }}.
+                    small.d-block.text-muted(v-else) No rule matched this event.
+                  span(v-else) Trace unavailable
                 td.text-right {{ Math.round(event.duration) }}s
             hr
       div.d-flex.align-items-center.mt-3(v-if="hasMoreWords")
@@ -78,12 +92,23 @@ div
           @click="visible_count += page_size"
         ) Show more
 
+  details.mt-3(v-if="ignored_words.length")
+    summary Ignored suggestions
+    ul.mb-0.mt-2
+      li(v-for="word in ignored_words" :key="word")
+        | {{ word }}
+        b-button.ml-2(size="sm" variant="outline-secondary" @click="restoreWord(word)") Restore
+
   div(v-if="create.categoryId !== null")
     CategoryEditModal(:categoryId="create.categoryId",
                       @ok="createRuleOk()"
                       @hidden="createRuleCancel()")
 
   b-modal(id="appendRule" title="Append rule" @ok="handleOk" :ok-disabled="!valid")
+    b-alert(variant="info" show)
+      p.mb-1 Review: this rule currently matches {{ appendPreview.events }} uncategorized events ({{ Math.round(appendPreview.duration) }}s) in the selected host and date range.
+      p.mb-1 Fields changed: category rule only. Stored event fields and previously downloaded reports remain unchanged.
+      small Counts cover this preview window; recalculation may apply the rule to other matching local events.
     b-form(ref="form" @submit.stop.prevent="handleSubmit")
       b-form-group(label="Rule"
                    label-for="append-category"
@@ -112,13 +137,18 @@ import moment from 'moment';
 import { mapState } from 'pinia';
 
 import { useCategoryStore } from '~/stores/categories';
+import { useSettingsStore } from '~/stores/settings';
 import { useBucketsStore } from '~/stores/buckets';
 
 import { canonicalEvents } from '~/queries';
 import { getClient } from '~/util/awclient';
 import CategoryEditModal from '~/components/CategoryEditModal.vue';
 import { isRegexBroad, validateRegex } from '~/util/validate';
-import { findCommonPhrases } from '~/util/categorization';
+import {
+  findCommonPhrases,
+  sortWordEntries,
+  summarizeSuggestionEvents,
+} from '~/util/categorization';
 
 export default {
   name: 'CategoryBuilder',
@@ -133,6 +163,7 @@ export default {
       loading: true,
 
       categoryStore: useCategoryStore(),
+      settingsStore: useSettingsStore(),
 
       // Pagination for the words list. Showing the full list directly
       // produced a 2+ screen wall of buttons on most users' data; this
@@ -150,16 +181,17 @@ export default {
       // TODO: Support inspecting a different category than Uncategorized (e.g. to make some category more precise)
       category: ['Uncategorized'],
 
-      words: {},
+      words: new Map(),
       showing_events: [],
 
-      // TODO: load from settings
       ignored_words: [],
+      ignoreError: '',
 
       append: {
         word: '',
         category: [],
       },
+      appendPreview: { events: 0, duration: 0 },
       create: {
         word: '',
         categoryId: null,
@@ -169,9 +201,7 @@ export default {
   computed: {
     ...mapState(useCategoryStore, ['allCategoriesSelect']),
     words_by_duration: function () {
-      const words: { word: string; duration: number }[] = [...this.words.values()];
-      return words
-        .sort((a, b) => b.duration - a.duration)
+      return sortWordEntries([...this.words.values()])
         .filter(word => word.duration > 60)
         .filter(word => !this.ignored_words.includes(word.word));
     },
@@ -205,6 +235,8 @@ export default {
   async mounted() {
     // Make sure we don't have stale unsaved changes in categoryStore
     await useBucketsStore().ensureLoaded();
+    await this.settingsStore.ensureLoaded();
+    this.ignored_words = [...(this.settingsStore.ignoredCategorySuggestions || [])];
     await this.categoryStore.load();
     // Called by watch
     //await this.fetchWords();
@@ -237,6 +269,7 @@ export default {
           filter_afk: this.queryOptions.filter_afk,
           categories: this.categoryStore.classes_for_query,
           filter_categories: [this.category],
+          explain_categories: true,
         }) + 'RETURN = limit_events(sort_by_duration(events), 1000);';
       const data = await awclient.query(
         [
@@ -285,9 +318,25 @@ export default {
 
       this.showing_events = [word, events];
     },
-    ignoreWord(word: string) {
-      console.log('Ignoring word: ' + word);
-      this.ignored_words.push(word);
+    async ignoreWord(word: string) {
+      const ignored = new Set(this.settingsStore.ignoredCategorySuggestions || []);
+      ignored.add(word);
+      await this.saveIgnoredWords([...ignored].sort());
+    },
+    async restoreWord(word: string) {
+      const ignored = (this.settingsStore.ignoredCategorySuggestions || []).filter(
+        value => value !== word
+      );
+      await this.saveIgnoredWords(ignored);
+    },
+    async saveIgnoredWords(ignored: string[]) {
+      this.ignoreError = '';
+      try {
+        await this.settingsStore.update({ ignoredCategorySuggestions: ignored });
+        this.ignored_words = ignored;
+      } catch {
+        this.ignoreError = 'This suggestion could not be saved as ignored. Try again.';
+      }
     },
     createRule(word: string) {
       console.log('Opening modal for creating rule with word: ' + word);
@@ -314,6 +363,7 @@ export default {
     appendRule(word) {
       console.log('Opening modal to append rule with word: ' + word);
       this.append.word = _.escapeRegExp(word);
+      this.appendPreview = summarizeSuggestionEvents(this.words.get(word)?.events || []);
       this.$bvModal.show('appendRule');
     },
     async appendRuleOk() {

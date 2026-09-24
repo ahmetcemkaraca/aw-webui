@@ -10,9 +10,9 @@ div
         | Save
   p.mt-2.mb-2
     | Regex-based rules that drop or redact sensitive event data before it is stored.
-    | Rules are saved to the server setting #[code privacy_filters] and used by aw-server-rust.
+    | These extra rules apply only to fields that the enabled sources are allowed to send.
   small.text-muted
-    | Leave the editor empty or save <code>[]</code> to disable the feature.
+    | Clearing these extra rules does not disable source permissions, pause or field minimization.
 
   b-alert.mt-3(:show="saveError !== ''" variant="danger")
     | {{ saveError }}

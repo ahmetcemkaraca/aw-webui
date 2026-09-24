@@ -21,7 +21,7 @@ div
     div(v-if="!has_prerequisites")
       b-alert.small.px-2.py-1(show variant="warning")
         | This feature is missing data from a required watcher.
-        | You can find a list of all watchers in #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") the documentation].
+        | Check that the required local collectors are enabled.
 
     div(v-if="type == 'top_apps'")
       aw-summary(:fields="activityStore.window.top_apps",

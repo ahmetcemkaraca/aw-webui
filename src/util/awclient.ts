@@ -1,93 +1,116 @@
 import { AWClient } from 'aw-client';
-import type { AxiosInstance } from 'axios';
 
 import { useSettingsStore } from '~/stores/settings';
 
-const API_TOKEN_QUERY_PARAM = 'token';
-const API_TOKEN_STORAGE_KEY = 'aw-api-token';
-
 let _client: AWClient | null;
+let sessionToken: string | null = null;
+let pendingSession: Promise<string> | null = null;
 
-function normalizeToken(token: string | null): string | null {
-  if (!token) {
-    return null;
+type AndroidSessionBridge = {
+  postMessage(message: string): void;
+  onmessage: ((event: { data: unknown }) => void) | null;
+};
+
+type AndroidRpcReply = { id?: string; result?: unknown; error?: string };
+
+const pendingAndroidCalls = new Map<string, {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timeout: number;
+}>();
+let androidCallId = 0;
+let routedAndroidBridge: AndroidSessionBridge | null = null;
+
+export function invokeAndroidNative(command: string, args?: object): Promise<unknown> {
+  const android = (window as unknown as { Android?: AndroidSessionBridge }).Android;
+  if (!android) return Promise.reject(new Error('Android native bridge is unavailable.'));
+  if (routedAndroidBridge !== android) {
+    const previous = android.onmessage;
+    android.onmessage = event => {
+      let reply: AndroidRpcReply | null = null;
+      try { reply = JSON.parse(String(event.data)) as AndroidRpcReply; } catch (_) { /* not an RPC reply */ }
+      const pending = reply?.id ? pendingAndroidCalls.get(reply.id) : undefined;
+      if (!pending || !reply?.id) {
+        previous?.(event);
+        return;
+      }
+      pendingAndroidCalls.delete(reply.id);
+      window.clearTimeout(pending.timeout);
+      if (typeof reply.error === 'string') pending.reject(new Error(reply.error));
+      else pending.resolve(reply.result);
+    };
+    routedAndroidBridge = android;
   }
 
-  const trimmed = token.trim();
-  return trimmed ? trimmed : null;
+  const id = `android-${++androidCallId}`;
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingAndroidCalls.delete(id);
+      reject(new Error('Android native operation timed out.'));
+    }, 30_000);
+    pendingAndroidCalls.set(id, { resolve, reject, timeout });
+    try {
+      android.postMessage(JSON.stringify({ id, command, args: args || {} }));
+    } catch (error) {
+      pendingAndroidCalls.delete(id);
+      window.clearTimeout(timeout);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
-function getSessionStorage(): Storage | null {
-  if (typeof sessionStorage === 'undefined') {
-    return null;
+function validToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
+export async function authorizeLocalSession(): Promise<string> {
+  if (sessionToken) return sessionToken;
+  if (pendingSession) return pendingSession;
+  const bridge = (window as unknown as {
+    __TAURI__?: { core: { invoke: (command: string) => Promise<unknown> } };
+  }).__TAURI__;
+  const android = (window as unknown as { Android?: AndroidSessionBridge }).Android;
+  const authorization = android
+    ? invokeAndroidNative('local_session')
+    : bridge
+      ? bridge.core.invoke('local_session')
+      : Promise.reject(new Error('Open PeakActivity to authorize this view.'));
+  pendingSession = authorization.then(value => {
+    if (!validToken(value)) throw new Error('The local session could not be authorized.');
+    sessionToken = value;
+    return value;
+  }).finally(() => { pendingSession = null; });
+  return pendingSession;
+}
+
+export function clearLocalSession(): void {
+  sessionToken = null;
+}
+
+export function isLoopbackApiUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return url.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1'].includes(host)
+      && !url.username
+      && !url.password
+      && url.pathname === '/'
+      && !url.search
+      && !url.hash;
+  } catch (_) {
+    return false;
   }
-
-  return sessionStorage;
 }
 
-export function getStoredApiToken(): string | null {
-  return normalizeToken(getSessionStorage()?.getItem(API_TOKEN_STORAGE_KEY) ?? null);
-}
-
-export function getApiTokenFromLocation(currentLocation: Pick<Location, 'search'>): string | null {
-  if (typeof URLSearchParams === 'undefined') {
-    return null;
-  }
-
-  return normalizeToken(new URLSearchParams(currentLocation.search).get(API_TOKEN_QUERY_PARAM));
-}
-
-function persistApiToken(token: string): void {
-  getSessionStorage()?.setItem(API_TOKEN_STORAGE_KEY, token);
-}
-
-export function stripApiTokenFromCurrentUrl(): void {
-  if (typeof window === 'undefined' || typeof history === 'undefined') {
-    return;
-  }
-
+export function discardLegacyUrlToken(): void {
+  if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has(API_TOKEN_QUERY_PARAM)) {
-    return;
-  }
-
-  url.searchParams.delete(API_TOKEN_QUERY_PARAM);
-  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-  window.history.replaceState(window.history.state, '', nextUrl || '/');
-}
-
-// NOTE: The token is visible in window.location.href from page load until this
-// function executes.  In the intended WebView/launcher environment no third-party
-// scripts run, so the exposure window is acceptable.  For general browser use,
-// consider passing the credential via the URL fragment instead of a query param.
-export function loadApiTokenFromBrowser(): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const urlToken = getApiTokenFromLocation(window.location);
-  if (urlToken) {
-    persistApiToken(urlToken);
-    stripApiTokenFromCurrentUrl();
-    return urlToken;
-  }
-
-  return getStoredApiToken();
-}
-
-export function applyApiToken(client: { req: AxiosInstance }, token: string | null): void {
-  const defaults = client.req.defaults;
-  const headers = (defaults.headers as Record<string, Record<string, unknown>>) || {};
-  const commonHeaders = headers.common || {};
-
-  if (token) {
-    commonHeaders.Authorization = `Bearer ${token}`;
-  } else {
-    delete commonHeaders.Authorization;
-  }
-
-  headers.common = commonHeaders;
-  defaults.headers = headers as typeof defaults.headers;
+  const hadToken = ['token', 'api_key', 'access_token'].some(key => url.searchParams.has(key));
+  for (const key of ['token', 'api_key', 'access_token']) url.searchParams.delete(key);
+  if (hadToken) window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  // Never restore bearer credentials from storage or URLs.
+  window.sessionStorage.removeItem('aw-api-token');
 }
 
 export function createClient(force?: boolean): AWClient {
@@ -99,7 +122,10 @@ export function createClient(force?: boolean): AWClient {
   // Works since CORS is enabled by default when running `aw-server --testing`.
   if (!production) {
     const aw_server_url = typeof AW_SERVER_URL !== 'undefined' && AW_SERVER_URL;
-    baseURL = aw_server_url || 'http://127.0.0.1:5666';
+    if (aw_server_url && !isLoopbackApiUrl(aw_server_url)) {
+      throw new Error('AW_SERVER_URL must use an exact loopback HTTP origin.');
+    }
+    baseURL = aw_server_url ? new URL(aw_server_url).origin : 'http://127.0.0.1:5666';
   }
 
   if (!_client || force) {
@@ -107,7 +133,22 @@ export function createClient(force?: boolean): AWClient {
       testing: !production,
       baseURL,
     });
-    applyApiToken(_client, loadApiTokenFromBrowser());
+    discardLegacyUrlToken();
+    _client.req.interceptors.request.use(async config => {
+      const token = await authorizeLocalSession();
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+      return config;
+    });
+    _client.req.interceptors.response.use(response => {
+      const replacement = response.headers['x-peakactivity-token'];
+      if (validToken(replacement)) sessionToken = replacement;
+      return response;
+    }, error => {
+      // Do not replay writes; the next explicit request acquires a fresh IPC session.
+      if (error.response?.status === 401) clearLocalSession();
+      return Promise.reject(error);
+    });
   } else {
     throw 'Tried to instantiate global AWClient twice!';
   }

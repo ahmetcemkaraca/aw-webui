@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "input": {
+    "focus": [
+      {
+        "date": "2026-06-01",
+        "duration": 0,
+        "sessions": 4,
+        "avgSession": 0,
+        "events": [
+          { "timestamp": "2026-06-01T09:00:00Z", "duration": 1200, "data": { "app": "Editor" } },
+          { "timestamp": "2026-06-01T09:24:00Z", "duration": 360, "data": { "app": "Editor" } },
+          { "timestamp": "2026-06-01T10:00:00Z", "duration": 1499, "data": { "app": "Editor" } },
+          { "timestamp": "2026-06-01T10:30:59Z", "duration": 1500, "data": { "app": "Editor" } }
+        ]
+      }
+    ],
+    "context_switches": [
+      {
+        "date": "2026-06-01",
+        "duration": 0,
+        "sessions": 4,
+        "avgSession": 0,
+        "events": [
+          { "timestamp": "2026-06-01T09:00:00Z", "duration": 60, "data": { "app": "Editor" } },
+          { "timestamp": "2026-06-01T09:01:30Z", "duration": 60, "data": { "app": "Browser" } },
+          { "timestamp": "2026-06-01T09:03:30Z", "duration": 60, "data": { "app": "Editor" } },
+          { "timestamp": "2026-06-01T09:05:31Z", "duration": 60, "data": { "app": "Chat" } }
+        ]
+      }
+    ],
+    "insufficient_context": [
+      {
+        "date": "2026-06-01",
+        "duration": 1,
+        "sessions": 1,
+        "avgSession": 1,
+        "events": [
+          {
+            "timestamp": "2026-06-01T09:00:00Z",
+            "duration": 1,
+            "data": { "title": "No app field" }
+          }
+        ]
+      }
+    ],
+    "meetings": {
+      "category_paths": [["Work", "Meetings"]],
+      "daily": [
+        {
+          "date": "2026-06-01",
+          "duration": 0,
+          "sessions": 2,
+          "avgSession": 0,
+          "events": [
+            {
+              "timestamp": "2026-06-01T09:00:00Z",
+              "duration": 299,
+              "data": { "$category": ["Work", "Meetings"] }
+            },
+            {
+              "timestamp": "2026-06-01T10:00:00Z",
+              "duration": 300,
+              "data": { "$category": ["Work", "Meetings"] }
+            },
+            {
+              "timestamp": "2026-06-01T11:00:00Z",
+              "duration": 500,
+              "data": { "$category": ["Work", "Writing"] }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "focus": {
+      "method_id": "focus-blocks",
+      "method_version": 1,
+      "outcome": "calculated",
+      "thresholds": { "minimum_duration_seconds": 1500, "maximum_gap_seconds": 300 },
+      "intervals": [
+        {
+          "start": "2026-06-01T09:00:00.000Z",
+          "end": "2026-06-01T09:30:00.000Z",
+          "duration_seconds": 1800
+        },
+        {
+          "start": "2026-06-01T10:30:59.000Z",
+          "end": "2026-06-01T10:55:59.000Z",
+          "duration_seconds": 1500
+        }
+      ]
+    },
+    "context_switches": {
+      "method_id": "context-switches",
+      "method_version": 1,
+      "outcome": "calculated",
+      "thresholds": { "maximum_gap_seconds": 60 },
+      "intervals": [
+        {
+          "start": "2026-06-01T09:01:00.000Z",
+          "end": "2026-06-01T09:01:30.000Z",
+          "gap_seconds": 30,
+          "from_app": "Editor",
+          "to_app": "Browser"
+        },
+        {
+          "start": "2026-06-01T09:02:30.000Z",
+          "end": "2026-06-01T09:03:30.000Z",
+          "gap_seconds": 60,
+          "from_app": "Browser",
+          "to_app": "Editor"
+        }
+      ]
+    },
+    "meetings": {
+      "method_id": "meeting-load",
+      "method_version": 1,
+      "outcome": "calculated",
+      "thresholds": { "minimum_interval_seconds": 300 },
+      "duration_seconds": 300,
+      "intervals": [
+        {
+          "start": "2026-06-01T10:00:00.000Z",
+          "end": "2026-06-01T10:05:00.000Z",
+          "duration_seconds": 300
+        }
+      ]
+    }
+  }
+}

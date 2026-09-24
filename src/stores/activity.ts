@@ -281,6 +281,11 @@ export const useActivityStore = defineStore('activity', {
           this.query_category_time_by_period_completed();
         }
 
+        const stopwatchIncluded = this.window.available && !settingsStore.useMultidevice;
+        if (query_options.include_stopwatch && this.stopwatch.available && !stopwatchIncluded) {
+          await this.query_stopwatch_only(query_options);
+        }
+
         if (this.active.available) {
           await this.query_active_history(query_options);
         } else if (this.android.available) {
@@ -391,6 +396,15 @@ export const useActivityStore = defineStore('activity', {
         verbose: true,
       });
       this.query_editor_completed(data[0]);
+    },
+
+    async query_stopwatch_only({ timeperiod }) {
+      const bucket = this.buckets.stopwatch[0];
+      if (!bucket) { this.query_stopwatch_completed(); return; }
+      const data = await getClient().query([timeperiodToStr(timeperiod)], queries.stopwatchOnlyQuery(bucket), {
+        name: 'stopwatchOnlyQuery',
+      });
+      this.query_stopwatch_completed(data[0]);
     },
 
     async query_active_history({ timeperiod, ...query_options }: QueryOptions) {
@@ -687,6 +701,7 @@ export const useActivityStore = defineStore('activity', {
 
       this.category.top = null;
       this.category.by_period = null;
+      this.stopwatch.top_stopwatches = null;
 
       this.active.duration = null;
 

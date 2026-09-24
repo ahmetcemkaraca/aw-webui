@@ -38,6 +38,14 @@ function expectBracketsClosed(query) {
   expect(openBraces && openBraces.length).toEqual(closeBraces && closeBraces.length);
 }
 
+test('manual stopwatch query does not depend on window or idle buckets', () => {
+  const query = queries.stopwatchOnlyQuery('aw-stopwatch').join('\n');
+  expect(query).toContain('query_bucket("aw-stopwatch")');
+  expect(query).toContain('"stopwatch_events"');
+  expect(query).not.toContain('aw-watcher-window');
+  expect(query).not.toContain('aw-watcher-afk');
+});
+
 test('generate fullDesktopQuery', () => {
   let query = queries.fullDesktopQuery(queryParams).join('\n');
   expect(query).toMatchSnapshot();
@@ -46,4 +54,15 @@ test('generate fullDesktopQuery', () => {
   query = queries.activityQuery([bid_afk]).join('\n');
   expect(query).toMatchSnapshot();
   expectBracketsClosed(query);
+});
+
+test('category simulator requests deterministic rule traces', () => {
+  const query = queries.canonicalEvents({
+    ...queryParams,
+    categories: [[['Work'], { type: 'regex', regex: 'editor' }]],
+    filter_categories: [],
+    explain_categories: true,
+  });
+  expect(query).toContain('categorize_explained(events,');
+  expect(query).not.toContain('events = categorize(events,');
 });

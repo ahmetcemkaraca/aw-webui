@@ -3,7 +3,7 @@
 div
   h3 Query Explorer
 
-  | See #[a(href="https://docs.activitywatch.net/en/latest/examples/querying-data.html") the documentation] for help on how to write queries.
+  | Queries run against your local activity data. Use synthetic data when sharing query examples.
 
   hr
 

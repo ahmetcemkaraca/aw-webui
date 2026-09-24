@@ -36,10 +36,10 @@ b-modal(id="edit" ref="edit" title="Edit category" @show="resetModal" @hidden="h
 
   hr
   div.my-1
-    b Productivity score
+    b Category weight
     b-form-checkbox(v-model="editing.inherit_score" switch)
-      | Inherit parent score
-    b-input-group.my-1(prepend="Score" v-if="!editing.inherit_score")
+      | Inherit parent weight
+    b-input-group.my-1(prepend="Weight" v-if="!editing.inherit_score")
       b-form-input(v-model="editing.score")
 
   hr

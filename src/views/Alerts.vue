@@ -1,6 +1,6 @@
 <template lang="pug">
 div
-  h3 Alerts
+  h3 Category goals
 
   // TODO: Call this "goals" instead? (alerts is more general, but goals might fit the most common use better
   // TODO: Support 'less than' goals
@@ -8,14 +8,14 @@ div
   // TODO: Query from day start, not 24h ago
 
   b-alert(variant="warning" show)
-    | This feature is still in early development.
+    | Experimental. This screen shows local category-goal progress; it does not send notifications.
 
   b-alert(v-if="error" show variant="danger")
     | {{error}}
 
   b-alert(v-if="hostnames.length === 0" show variant="info")
     | No host with both window and AFK buckets is available, so alerts can't run yet.
-    | Install #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") aw-watcher-window and aw-watcher-afk] to enable this view.
+    | Install the window and idle collectors to enable this view.
 
   b-card(v-for="alert in alerts", :key="alert.name")
     b-button.float-right(@click="deleteAlert(alert.name)" size="sm" variant="outline-danger")

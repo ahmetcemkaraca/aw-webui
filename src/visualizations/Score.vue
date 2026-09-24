@@ -4,19 +4,19 @@ div
     button.score__help-btn(
       id="scoreHelp"
       type="button"
-      aria-label="How is the score calculated?"
+      aria-label="How is category weighting calculated?"
     )
       icon(name="question-circle" scale="0.9")
     b-tooltip(target="scoreHelp" placement="left" triggers="hover focus")
-      | Sum of (hours &times; category score). Set category scores in #[b Settings &gt; Categories]. Positive scores reward activities you want to do more of; negative ones penalize distractions.
-    div.small.text-muted Score for {{ score_period_label }}
+      | Sum of hours multiplied by the category weights you choose in Settings &gt; Categorization. Positive weights increase the total; negative weights decrease it. This reflects only your choices and does not compare you with other people.
+    div.small.text-muted Category weighting for {{ score_period_label }}
     div.score-value(:class="score >= 0 ? 'text-success' : 'text-danger'")
       | {{score >= 0 ? '+' : ''}}{{ (Math.round(score * 10) / 10).toFixed(1) }}
     div.small.text-muted(v-if="!isNaN(score_productive_percent)")
-      | {{score_productive_percent.toFixed(1)}}% productive
+      | {{score_productive_percent.toFixed(1)}}% of time in positive-weight categories
   hr
   div
-    b Top productive
+    b Top positive-weight categories
     div.mt-2(v-for="cat in top_productive" :key="cat.data.$category.join('>')")
       div.d-flex.align-items-center
         div
@@ -26,10 +26,10 @@ div
         div.ml-auto.text-success.h5.mb-0
           | +{{ (Math.round(cat.data.$total_score * 10) / 10).toFixed(1) }}
     p.text-muted.small.mb-0.mt-2(v-if="top_productive.length === 0")
-      | No productive categories recorded yet.
+      | No positive-weight categories recorded yet.
   hr
   div
-    b Top distracting
+    b Top negative-weight categories
     div.mt-2(v-for="cat in top_distracting" :key="cat.data.$category.join('>')")
       div.d-flex.align-items-center
         div
@@ -39,7 +39,7 @@ div
         div.ml-auto.text-danger.h5.mb-0
           | {{ (Math.round(cat.data.$total_score * 10) / 10).toFixed(1) }}
     p.text-muted.small.mb-0.mt-2(v-if="top_distracting.length === 0")
-      | No distracting activity in this period.
+      | No negative-weight activity in this period.
 </template>
 
 <style scoped>

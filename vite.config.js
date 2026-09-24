@@ -60,15 +60,15 @@ export default defineConfig(({ mode }) => {
           enabled: true,
         },
         manifest: {
-          name: 'ActivityWatch',
-          short_name: 'ActivityWatch',
+          name: 'PeakActivity',
+          short_name: 'PeakActivity',
           description: 'Automatically track your computer usage',
           theme_color: '#ffffff',
           icons: [
             {
-              src: 'logo.png',
-              sizes: '512x512',
-              type: 'image/png',
+              src: 'peakactivity.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
             },
           ],
         },

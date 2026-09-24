@@ -28,7 +28,6 @@ import { useCategoryStore } from '~/stores/categories';
 
 import DaystartSettings from '~/views/settings/DaystartSettings.vue';
 import TimelineDurationSettings from '~/views/settings/TimelineDurationSettings.vue';
-import ReleaseNotificationSettings from '~/views/settings/ReleaseNotificationSettings.vue';
 import UncategorizedHintSettings from '~/views/settings/UncategorizedHintSettings.vue';
 import CategorizationSettings from '~/views/settings/CategorizationSettings.vue';
 import LandingPageSettings from '~/views/settings/LandingPageSettings.vue';
@@ -36,7 +35,15 @@ import DeveloperSettings from '~/views/settings/DeveloperSettings.vue';
 import Theme from '~/views/settings/Theme.vue';
 import ColorSettings from '~/views/settings/ColorSettings.vue';
 import ActivePatternSettings from '~/views/settings/ActivePatternSettings.vue';
+import CaptureControls from '~/components/CaptureControls.vue';
 import PrivacyFilterSettings from '~/views/settings/PrivacyFilterSettings.vue';
+import PrivacyFirewallSettings from '~/views/settings/PrivacyFirewallSettings.vue';
+import DataRetentionSettings from '~/views/settings/DataRetentionSettings.vue';
+import AISettings from '~/views/settings/AISettings.vue';
+import SyncSettings from '~/views/settings/SyncSettings.vue';
+import PluginSettings from '~/views/settings/PluginSettings.vue';
+import experience from '~/generated/product-experience.json';
+import { capability } from '~/product/experience';
 
 interface Group {
   id: string;
@@ -50,7 +57,6 @@ export default {
   components: {
     DaystartSettings,
     TimelineDurationSettings,
-    ReleaseNotificationSettings,
     UncategorizedHintSettings,
     CategorizationSettings,
     LandingPageSettings,
@@ -59,6 +65,12 @@ export default {
     DeveloperSettings,
     ActivePatternSettings,
     PrivacyFilterSettings,
+    PrivacyFirewallSettings,
+    DataRetentionSettings,
+    SyncSettings,
+    AISettings,
+    PluginSettings,
+    CaptureControls,
   },
   beforeRouteLeave(to, from, next) {
     const categoryStore = useCategoryStore();
@@ -92,9 +104,6 @@ export default {
           { name: 'TimelineDurationSettings' },
           { name: 'LandingPageSettings' },
           { name: 'UncategorizedHintSettings' },
-          // Release-notification check folded in here so it doesn't
-          // need its own one-setting "Updates" panel.
-          ...(this.$isAndroid ? [] : [{ name: 'ReleaseNotificationSettings' }]),
         ],
       };
       const appearance: Group = {
@@ -115,8 +124,38 @@ export default {
       const privacy: Group = {
         id: 'privacy',
         label: 'Privacy',
-        help: 'Filters that drop or redact sensitive event data before it is stored.',
-        components: [{ name: 'PrivacyFilterSettings' }],
+        help: `Local filters drop or redact sensitive event data before it is stored. Outbound Privacy Firewall approvals and receipts: ${
+          capability('privacy-firewall', experience)?.status || 'Unavailable'
+        }.`,
+        components: [
+          { name: 'CaptureControls' },
+          { name: 'PrivacyFilterSettings' },
+          { name: 'PrivacyFirewallSettings' },
+        ],
+      };
+      const data: Group = {
+        id: 'data',
+        label: 'Data lifecycle',
+        help: 'Choose how long raw events stay on this device. Reports are derived when requested and are not stored as separate aggregate data.',
+        components: [{ name: 'DataRetentionSettings' }],
+      };
+      const ai: Group = {
+        id: 'ai',
+        label: 'AI and endpoints',
+        help: 'AI is Off by default. Peak AI has no approved provider service; Custom Endpoint requires a signed purpose, exact preview, and your approval. Endpoint disclosures are not independently verified.',
+        components: [{ name: 'AISettings' }],
+      };
+      const sync: Group = {
+        id: 'sync',
+        label: 'Devices and sync',
+        help: 'Pairing and recovery work through local controls. Network sync stays off until a release capability and signed relay are available.',
+        components: [{ name: 'SyncSettings' }],
+      };
+      const plugins: Group = {
+        id: 'plugins',
+        label: 'Plugins',
+        help: 'Plugins start with no access. Installation and execution stay unavailable until the sandbox, signing and review gates pass.',
+        components: [{ name: 'PluginSettings' }],
       };
       const developer: Group = {
         id: 'developer',
@@ -124,7 +163,7 @@ export default {
         components: [{ name: 'DeveloperSettings' }],
       };
 
-      const groups: Group[] = [general, appearance, categorization, privacy, developer];
+      const groups: Group[] = [general, appearance, categorization, privacy, ai, data, sync, plugins, developer];
       return groups;
     },
   },

@@ -62,21 +62,21 @@ export default {
     },
   },
   pwa: {
-    name: 'ActivityWatch',
+    name: 'PeakActivity',
     iconPaths: {
-      faviconSVG: null, // SVG won't render without needed fonts etc, so fall back to png
-      favicon32: 'logo.png',
-      favicon16: 'logo.png',
-      appleTouchIcon: 'logo.png',
+      faviconSVG: 'peakactivity.svg',
+      favicon32: null,
+      favicon16: null,
+      appleTouchIcon: null,
       //maskIcon: 'logo.png',
-      msTileImage: 'logo.png',
+      msTileImage: null,
     },
     manifestOptions: {
       icons: [
         {
-          src: 'logo.png',
-          sizes: '512x512',
-          type: 'image/png',
+          src: 'peakactivity.svg',
+          sizes: 'any',
+          type: 'image/svg+xml',
         },
       ],
     },

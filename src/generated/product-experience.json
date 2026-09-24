@@ -1,0 +1,775 @@
+{
+  "actions": [
+    "Create Local Vault",
+    "Import existing data",
+    "Explore without recording",
+    "Open Today",
+    "Enable selected sources",
+    "Continue with these sources",
+    "Continue with fewer sources",
+    "Start recording",
+    "Pause recording",
+    "Pause temporarily",
+    "Pause for 15 minutes",
+    "Pause for 1 hour",
+    "Pause until tomorrow",
+    "Enter Private Mode",
+    "Resume recording",
+    "Start manual timer",
+    "Stop manual timer",
+    "Add manual entry",
+    "Split event",
+    "Merge adjacent activities",
+    "Download PeakActivity",
+    "Review source",
+    "Get help",
+    "Review organization policy",
+    "Review aggregate reports",
+    "Appeal a policy decision",
+    "Add privacy rule",
+    "Exclude this activity",
+    "Delete activity",
+    "Edit category",
+    "Assign project",
+    "Create rule from selection",
+    "Preview data",
+    "Approve and send",
+    "Cancel request",
+    "Enable Peak AI",
+    "Configure Custom Endpoint",
+    "Turn AI off",
+    "Test connection",
+    "Save endpoint",
+    "Remove endpoint",
+    "Set up sync",
+    "Pair device",
+    "Revoke device",
+    "Create recovery kit",
+    "Export data",
+    "Delete data",
+    "Lock vault",
+    "Unlock vault",
+    "Review permissions",
+    "Grant permission",
+    "Open system settings",
+    "Upgrade plan",
+    "Manage subscription",
+    "Download invoice",
+    "Cancel subscription",
+    "Install plugin",
+    "Update plugin",
+    "Revoke access",
+    "Uninstall"
+  ],
+  "ai_modes": [
+    {
+      "id": "off",
+      "label": "Off"
+    },
+    {
+      "id": "peak-ai",
+      "label": "Peak AI"
+    },
+    {
+      "id": "custom-endpoint",
+      "label": "Custom Endpoint"
+    }
+  ],
+  "capabilities": [
+    {
+      "basis": "Inherited upstream collectors; platform permissions and display support apply.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "aw-watcher-window",
+        "aw-watcher-afk"
+      ],
+      "id": "local-capture",
+      "offline": true,
+      "permissions": [
+        "window-access",
+        "idle-status"
+      ],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Available",
+      "summary": "Local window and idle activity collection."
+    },
+    {
+      "basis": "Inherited upstream bucket, event and query implementation.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "aw-server",
+        "aw-server-rust"
+      ],
+      "id": "local-api",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Available",
+      "summary": "Local bucket/event storage and HTTP API."
+    },
+    {
+      "basis": "Inherited upstream web interface inside the server and desktop modules.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "aw-server",
+        "aw-tauri"
+      ],
+      "id": "web-interface",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Available",
+      "summary": "Local activity history web interface."
+    },
+    {
+      "basis": "Source feature exists; default desktop encryption and key lifecycle are not implemented.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "aw-server-rust"
+      ],
+      "id": "sqlcipher",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Optional SQLCipher build support."
+    },
+    {
+      "basis": "Rust datastore filtering foundation; not a complete outbound privacy boundary.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "aw-server-rust"
+      ],
+      "id": "storage-filter",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Pre-storage event filtering."
+    },
+    {
+      "basis": "Upstream shell; product branding, packaging and platform acceptance remain incomplete.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "aw-tauri"
+      ],
+      "id": "desktop",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Tauri desktop shell."
+    },
+    {
+      "basis": "Planned; no shipped encrypted desktop vault or native key lifecycle.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "encrypted-default",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Encrypted-by-default local storage."
+    },
+    {
+      "basis": "Planned; upstream sync code is not evidence of the product protocol or an independent audit.",
+      "data_egress": "ciphertext-only",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "e2ee-sync",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux",
+        "android",
+        "ios"
+      ],
+      "product": "sync",
+      "status": "Planned",
+      "summary": "End-to-end encrypted synchronization and recovery."
+    },
+    {
+      "basis": "Planned; no shipped provider, credits or outbound approval flow.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "peak-ai",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux",
+        "android",
+        "ios",
+        "web"
+      ],
+      "product": "ai",
+      "status": "Planned",
+      "summary": "Optional Peak AI service."
+    },
+    {
+      "basis": "Planned; no shipped service configuration or request approval flow.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "custom-endpoint",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux",
+        "android",
+        "ios",
+        "web"
+      ],
+      "product": "ai",
+      "status": "Planned",
+      "summary": "User-configured Custom Endpoint."
+    },
+    {
+      "basis": "Planned; no live billing or production entitlement contract.",
+      "data_egress": "service",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "commercial",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "web"
+      ],
+      "product": "account",
+      "status": "Planned",
+      "summary": "Paid services and premium local workflows."
+    },
+    {
+      "basis": "Planned; research checkouts are not distributed product support.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "android",
+      "offline": true,
+      "permissions": [
+        "usage-access"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "android"
+      ],
+      "product": "mobile",
+      "status": "Planned",
+      "summary": "Android client."
+    },
+    {
+      "basis": "Planned; no desktop-equivalent tracking claim.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "ios",
+      "offline": true,
+      "permissions": [
+        "screen-time"
+      ],
+      "plan": "Plus",
+      "platforms": [
+        "ios"
+      ],
+      "product": "mobile",
+      "status": "Planned",
+      "summary": "Limited iOS companion."
+    },
+    {
+      "basis": "Planned; upstream extension compatibility does not constitute a branded release.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "browser",
+      "offline": true,
+      "permissions": [
+        "active-tab"
+      ],
+      "plan": "Community",
+      "platforms": [
+        "browser"
+      ],
+      "product": "browser",
+      "status": "Planned",
+      "summary": "PeakActivity browser extension."
+    },
+    {
+      "basis": "Planned; follows the individual product and its privacy acceptance gates.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "enterprise",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Enterprise",
+      "platforms": [
+        "web"
+      ],
+      "product": "enterprise",
+      "status": "Planned",
+      "summary": "Separate Enterprise product."
+    },
+    {
+      "basis": "Unsupported by product design; model download and inference management are excluded.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/privacy.md"
+      ],
+      "id": "local-llm",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux",
+        "android",
+        "ios"
+      ],
+      "product": "ai",
+      "status": "Unsupported",
+      "summary": "Bundled or on-device LLM execution."
+    },
+    {
+      "basis": "Planned; the unified outbound policy and approval receipt are owned by EPIC-04.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "privacy-firewall",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Deterministic filtering and exact approval for outbound payloads."
+    },
+    {
+      "basis": "The inherited rule editor exists; PeakActivity desktop integration and acceptance remain open.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "deterministic-rules",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Local user-defined rules and category classification."
+    },
+    {
+      "basis": "A basic local work report exists; the explainable insights experience is not yet accepted.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "insights-reports",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Local reports computed from retained activity."
+    },
+    {
+      "basis": "Planned Local Pro functionality; it does not include AI or network access.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "advanced-reports",
+      "offline": true,
+      "permissions": [],
+      "plan": "Local Pro",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Advanced deterministic local reports."
+    },
+    {
+      "basis": "Planned; supported destinations and data scopes are not yet released.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "integrations",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Pro",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Permissioned user-approved integrations."
+    },
+    {
+      "basis": "The inherited stopwatch flow exists; privacy and cross-platform desktop acceptance remain open.",
+      "data_egress": "loopback",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "manual-time-entry",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Experimental",
+      "summary": "Explicit user-created stopwatch entries."
+    },
+    {
+      "basis": "Planned; no verified update delivery is shipped.",
+      "data_egress": "service",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "desktop-update-integrity",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Verified desktop update and release-integrity flow."
+    },
+    {
+      "basis": "Planned; no user-facing notification history is implemented.",
+      "data_egress": "none",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "notification-history",
+      "offline": true,
+      "permissions": [],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "product": "desktop",
+      "status": "Planned",
+      "summary": "Local history of actionable desktop notifications."
+    },
+    {
+      "basis": "Planned; public source documentation is not the production product website.",
+      "data_egress": "service",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "website",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Community",
+      "platforms": [
+        "web"
+      ],
+      "product": "website",
+      "status": "Planned",
+      "summary": "PeakActivity product, download, source, support, and trust website."
+    },
+    {
+      "basis": "Planned; no freelancer artifact approval or delivery flow is shipped.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "freelancer-workspace",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Freelancer",
+      "platforms": [
+        "web"
+      ],
+      "product": "freelancer",
+      "status": "Planned",
+      "summary": "Approved timesheets, client reports, and invoice drafts."
+    },
+    {
+      "basis": "Planned; no plugin sandbox or signed marketplace is shipped.",
+      "data_egress": "user-approved",
+      "evidence_paths": [
+        "docs/roadmap.md"
+      ],
+      "id": "plugin-ecosystem",
+      "offline": false,
+      "permissions": [
+        "network"
+      ],
+      "plan": "Community",
+      "platforms": [
+        "windows",
+        "macos",
+        "linux",
+        "android"
+      ],
+      "product": "marketplace",
+      "status": "Planned",
+      "summary": "Capability-limited plugin discovery and installation."
+    }
+  ],
+  "capability_schema_version": 2,
+  "contract_version": 3,
+  "language": "en",
+  "schema_version": 1,
+  "states": {
+    "ai": [
+      "Off",
+      "Peak AI ready",
+      "Custom Endpoint ready",
+      "Connection test failed",
+      "Approval required",
+      "Request in progress",
+      "Usage limit reached",
+      "Disabled by policy"
+    ],
+    "integration_plugin": [
+      "Not connected",
+      "Permission review",
+      "Connected",
+      "Action required",
+      "Paused",
+      "Revoked"
+    ],
+    "recording": [
+      "Recording",
+      "Paused",
+      "Scheduled pause",
+      "Permission required",
+      "Source unavailable",
+      "Vault locked"
+    ],
+    "subscription": [
+      "Free",
+      "Trial",
+      "Active",
+      "Payment action required",
+      "Grace period",
+      "Canceled",
+      "Local Pro license"
+    ],
+    "sync": [
+      "Not configured",
+      "Pairing",
+      "Syncing",
+      "Up to date",
+      "Offline",
+      "Conflict requires review",
+      "Key recovery required",
+      "Device revoked"
+    ]
+  },
+  "terms": [
+    {
+      "definition": "A captured time interval and its minimized context.",
+      "id": "activity",
+      "label": "Activity"
+    },
+    {
+      "definition": "A chronological view of activities.",
+      "id": "timeline",
+      "label": "Timeline"
+    },
+    {
+      "definition": "A user-defined classification such as Work or Communication.",
+      "id": "category",
+      "label": "Category"
+    },
+    {
+      "definition": "A user-controlled grouping for reports and timesheets.",
+      "id": "project",
+      "label": "Project"
+    },
+    {
+      "definition": "Deterministic local classification, exclusion, or automation logic.",
+      "id": "rule",
+      "label": "Rule"
+    },
+    {
+      "definition": "A local condition in which selected capture or sharing is blocked.",
+      "id": "privacy-zone",
+      "label": "Privacy Zone"
+    },
+    {
+      "definition": "The mandatory policy layer for every outbound payload.",
+      "id": "privacy-firewall",
+      "label": "Privacy Firewall"
+    },
+    {
+      "definition": "Encrypted local activity storage.",
+      "id": "vault",
+      "label": "Vault"
+    },
+    {
+      "definition": "An end-to-end encrypted dataset shared by paired devices.",
+      "id": "sync-vault",
+      "label": "Sync Vault"
+    },
+    {
+      "definition": "A paired PeakActivity installation.",
+      "id": "device",
+      "label": "Device"
+    },
+    {
+      "definition": "A deterministic analysis or optional AI-generated explanation.",
+      "id": "insight",
+      "label": "Insight"
+    },
+    {
+      "definition": "A user-readable summary that is not shared until approved.",
+      "id": "report",
+      "label": "Report"
+    },
+    {
+      "definition": "A report artifact explicitly approved for a recipient.",
+      "id": "approved-timesheet",
+      "label": "Approved Timesheet"
+    },
+    {
+      "definition": "The selected AI connection state: Off, Peak AI, or Custom Endpoint.",
+      "id": "ai-mode",
+      "label": "AI Mode"
+    },
+    {
+      "definition": "PeakActivity-served access to the provider and model selected by PeakActivity.",
+      "id": "peak-ai",
+      "label": "Peak AI"
+    },
+    {
+      "definition": "A user-configured endpoint and model, including an external or paired-device service.",
+      "id": "custom-endpoint",
+      "label": "Custom Endpoint"
+    },
+    {
+      "definition": "A record of destination, purpose, fields, policy, and approval.",
+      "id": "receipt",
+      "label": "Receipt"
+    },
+    {
+      "definition": "A signed capability-limited extension.",
+      "id": "plugin",
+      "label": "Plugin"
+    },
+    {
+      "definition": "A number chosen by the user to tune that user\u2019s own category weighting.",
+      "id": "category-weight",
+      "label": "Category weight"
+    },
+    {
+      "definition": "A local report computed from category weights chosen by the user.",
+      "id": "category-weighting",
+      "label": "Category weighting"
+    }
+  ]
+}

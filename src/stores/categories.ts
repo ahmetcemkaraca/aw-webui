@@ -1,6 +1,5 @@
 import _ from 'lodash';
 import {
-  saveClasses,
   saveCategories,
   loadCategories,
   cleanCategory,
@@ -209,12 +208,10 @@ export const useCategoryStore = defineStore('categories', {
       this.classes_unsaved_changes = false;
     },
 
-    save(this: State) {
+    async save(this: State) {
       // Sync current classes back to the primary active set before persisting
       syncToPrimarySet(this);
-      saveCategories(this.category_sets, this.active_set_ids);
-      // Also update legacy flat classes field for backwards compatibility
-      saveClasses(this.classes);
+      await saveCategories(this.category_sets, this.active_set_ids);
       this.classes_unsaved_changes = false;
     },
 

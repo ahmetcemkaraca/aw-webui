@@ -3,7 +3,7 @@ div
   h3 Graph
 
   b-alert(show variant="warning")
-    | This feature is still in early development. See PR #[a(href="https://github.com/ActivityWatch/aw-webui/pull/365") aw-webui#365] for more information.
+    | This view is experimental and may change.
 
   p Displays a graph of categories and their transitions.
 

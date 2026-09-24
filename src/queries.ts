@@ -30,6 +30,7 @@ interface BaseQueryParams {
   include_audible?: boolean;
   categories: Category[];
   filter_categories: string[][];
+  explain_categories?: boolean;
   bid_browsers?: string[];
   bid_stopwatch?: string;
   return_variable_suffix?: string;
@@ -159,7 +160,11 @@ export function canonicalEvents(params: DesktopQueryParams | AndroidQueryParams)
          events = union_no_overlap(stopwatch_events, events);`
       : 'stopwatch_events = [];',
     // Categorize
-    params.categories ? `events = categorize(events, ${categories_str});` : '',
+    params.categories
+      ? `events = ${
+          params.explain_categories ? 'categorize_explained' : 'categorize'
+        }(events, ${categories_str});`
+      : '',
     // Filter out selected categories
     params.filter_categories
       ? `events = filter_keyvals(events, "$category", ${cat_filter_str});`
@@ -195,6 +200,17 @@ export function canonicalMultideviceEvents(params: MultiQueryParams): string {
 }
 
 const default_limit = 100; // Hardcoded limit per group
+
+export function stopwatchOnlyQuery(bucketId: string): string[] {
+  const bucket = escape_doublequote(bucketId);
+  return querystr_to_array(`
+    stopwatch_events = query_bucket("${bucket}");
+    stopwatch_events = merge_events_by_keys(stopwatch_events, ["label"]);
+    stopwatch_events = sort_by_duration(stopwatch_events);
+    stopwatch_events = limit_events(stopwatch_events, ${default_limit});
+    RETURN = {"stopwatch_events": stopwatch_events};
+  `);
+}
 
 export function appQuery(
   appbucket: string,

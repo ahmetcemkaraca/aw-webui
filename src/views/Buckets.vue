@@ -3,7 +3,7 @@ div
   h3 Buckets
 
   b-alert(show)
-    | Are you looking to collect more data? Check out #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") the docs] for more watchers.
+    | Review which collectors are running before adding new data sources.
 
   // By device
   b-card.bucket-card.mb-3(
@@ -139,14 +139,17 @@ div
       b-alert(v-if="import_error" show variant="danger" dismissible)
         | {{ import_error }}
       b-form-file(v-model="import_file"
+                  :disabled="import_busy"
                   placeholder="Choose or drop a file here..."
                   drop-placeholder="Drop file here...")
-      div.mt-2(v-if="import_file")
+      div.mt-2(v-if="import_busy")
         b-spinner.mr-2(small)
-        small.text-muted Importing...
+        small.text-muted Checking this import...
+      b-alert.mt-2(v-if="import_result" show variant="success")
+        | Imported {{ import_result.events_imported }} events; skipped {{ import_result.events_skipped }} and changed {{ import_result.events_changed }} for privacy.
       small.d-block.mt-2.text-muted
         | Provide a JSON file exported from a single bucket or from multiple buckets.
-        | Import fails if a bucket with the same ID already exists.
+        | Review duplicate and privacy-filter counts before writing.
     b-card(header="Export buckets")
       p.small.text-muted Download every bucket on this server as a single JSON file. Use this for backups.
       b-button(@click="export_all_buckets_json()",
@@ -154,6 +157,23 @@ div
                variant="outline-secondary")
         icon.mr-1(name="download")
         | Export all buckets as JSON
+
+  b-modal(id="import-preview-modal" title="Review data import" centered hide-footer :no-close-on-backdrop="import_busy" :no-close-on-esc="import_busy" @hidden="clearImportPreview")
+    template(v-if="import_preview")
+      p The file will be checked against the current local privacy rules. The original file is left untouched.
+      b-alert(v-if="import_error" show variant="danger") {{ import_error }}
+      ul
+        li {{ import_preview.buckets_created }} new buckets
+        li {{ import_preview.buckets_merged }} existing buckets to merge
+        li {{ import_preview.events_imported }} events to add
+        li {{ import_preview.events_skipped }} events skipped (duplicates, unparseable records, or privacy rules)
+        li {{ import_preview.events_changed }} events changed by privacy filtering
+      b-alert(v-if="!import_preview.buckets_created && !import_preview.events_imported" show variant="info") No new data will be written.
+      div.text-right
+        b-button.mr-2(:disabled="import_busy" @click="cancelImport") Cancel
+        b-button(variant="primary" :disabled="import_busy || (!import_preview.buckets_created && !import_preview.events_imported)" @click="confirmImport")
+          template(v-if="import_busy") Importing…
+          template(v-else) Import reviewed data
 
   hr
 
@@ -263,6 +283,9 @@ export default {
 
       import_file: null,
       import_error: null,
+      import_preview: null,
+      import_result: null,
+      import_busy: false,
       delete_bucket_selected: null,
       delete_host_selected: null,
       deleting_host: false,
@@ -298,22 +321,21 @@ export default {
     };
   },
   watch: {
-    import_file: async function (_new_value, _old_value) {
-      if (this.import_file != null) {
-        console.log('Importing file');
-        try {
-          await this.importBuckets(this.import_file);
-          console.log('Import successful');
-          this.import_error = null;
-        } catch (err) {
-          console.log('Import failed');
-          // TODO: Make aw-server report error message so it can be shown in the web-ui
-          this.import_error = 'Import failed, see aw-server logs for more info';
-        }
-        // We need to reload buckets even if we fail because imports can be partial
-        // (first bucket succeeds, second fails for example when importing multiple)
-        await this.bucketsStore.loadBuckets();
+    import_file: async function (file) {
+      if (!file) return;
+      this.import_error = null;
+      this.import_result = null;
+      this.import_preview = null;
+      this.import_busy = true;
+      try {
+        const response = await this.previewImport(file);
+        this.import_preview = response.data;
+        this.$root.$emit('bv::show::modal', 'import-preview-modal');
+      } catch (err) {
+        this.import_error = err?.response?.data?.message || 'Preview failed; no data was changed.';
         this.import_file = null;
+      } finally {
+        this.import_busy = false;
       }
     },
   },
@@ -402,6 +424,40 @@ export default {
       formData.append('buckets.json', importFile);
       const headers = { 'Content-Type': 'multipart/form-data' };
       return this.$aw.req.post('/0/import', formData, { headers });
+    },
+    previewImport: async function (importFile) {
+      const formData = new FormData();
+      formData.append('buckets.json', importFile);
+      return this.$aw.req.post('/0/import/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    cancelImport: function () {
+      this.$root.$emit('bv::hide::modal', 'import-preview-modal');
+    },
+    clearImportPreview: function () {
+      this.import_file = null;
+      this.import_preview = null;
+    },
+    confirmImport: async function () {
+      if (!this.import_file || this.import_busy || !this.import_preview) return;
+      this.import_busy = true;
+      this.import_error = null;
+      try {
+        const response = await this.importBuckets(this.import_file);
+        this.import_result = response.data;
+        this.$root.$emit('bv::hide::modal', 'import-preview-modal');
+      } catch (err) {
+        this.import_error = err?.response?.data?.message || 'Import failed. The source file is preserved; review the vault before retrying.';
+      } finally {
+        try {
+          await this.bucketsStore.loadBuckets();
+        } catch (_) {
+          this.import_error = this.import_error || 'The import finished, but the bucket list could not be refreshed.';
+        } finally {
+          this.import_file = null;
+          this.import_preview = null;
+          this.import_busy = false;
+        }
+      }
     },
 
     async export_bucket_json(bucketId: string) {

@@ -1,7 +1,16 @@
 import { IEvent } from '~/util/interfaces';
+import _ from 'lodash';
 
 // Regex used to split event titles into words
 const SPLIT_REGEX = /[\s\-,:()[\]/]/;
+
+function eventText(event: IEvent): string {
+  return (
+    (typeof event.data.title === 'string' && event.data.title) ||
+    (typeof event.data.app === 'string' && event.data.app) ||
+    ''
+  );
+}
 
 export interface WordEntry {
   word: string;
@@ -9,9 +18,28 @@ export interface WordEntry {
   events: IEvent[];
 }
 
+export function sortWordEntries(entries: WordEntry[]): WordEntry[] {
+  return [...entries].sort(
+    (a, b) => b.duration - a.duration || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0)
+  );
+}
+
+export function summarizeSuggestionEvents(events: IEvent[]): { events: number; duration: number } {
+  const unique = [...new Set(events)];
+  return {
+    events: unique.length,
+    duration: unique.reduce((total, event) => total + event.duration, 0),
+  };
+}
+
+export function buildExactRulePattern(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  return `^${_.escapeRegExp(value)}$`;
+}
+
 /**
- * Finds common words and bigrams (two-word phrases) in event titles,
- * weighted by time duration rather than event count.
+ * Finds common words and bigrams in captured titles, falling back to
+ * application names when title capture is disabled, weighted by duration.
  *
  * For each bigram that accounts for >50% of the total duration of both
  * constituent words, the bigram is promoted and the constituent words'
@@ -30,7 +58,9 @@ export function findCommonPhrases(
 
   // Step 1: Build word duration dictionary
   for (const event of events) {
-    for (const word of event.data.title.split(SPLIT_REGEX)) {
+    const text = eventText(event);
+    if (!text) continue;
+    for (const word of text.split(SPLIT_REGEX)) {
       if (word.length <= 2 || ignored_words.includes(word)) {
         continue;
       }
@@ -46,7 +76,9 @@ export function findCommonPhrases(
 
   // Step 2: Build bigram duration dictionary (skip bigrams with filtered words)
   for (const event of events) {
-    const parts = event.data.title.split(SPLIT_REGEX);
+    const text = eventText(event);
+    if (!text) continue;
+    const parts = text.split(SPLIT_REGEX);
     for (let i = 0; i < parts.length - 1; i++) {
       const w1 = parts[i];
       const w2 = parts[i + 1];

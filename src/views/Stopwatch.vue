@@ -41,7 +41,7 @@ div
     div(v-if="runningTimers.length > 0")
       div(v-for="e in runningTimers" :key="e.id")
         stopwatch-entry(:event="e", :bucket_id="bucket_id", :now="now",
-          @delete="removeTimer", @update="updateTimer")
+          @delete="removeTimer", @update="updateTimer", @refresh="getEvents")
     p.text-muted.mb-0(v-else) No stopwatch running. Start one above to track focused work.
 
     div(v-if="stoppedTimers.length > 0")
@@ -50,7 +50,7 @@ div
         h5.mt-3.mb-1 {{ k }}
         div(v-for="e in timersByDate[k]" :key="e.id")
           stopwatch-entry(:event="e", :bucket_id="bucket_id", :now="now",
-            @delete="removeTimer", @update="updateTimer", @new="startTimer(e.data.label)")
+            @delete="removeTimer", @update="updateTimer", @refresh="getEvents", @new="startTimer(e.data.label)")
 </template>
 
 <style scoped lang="scss">

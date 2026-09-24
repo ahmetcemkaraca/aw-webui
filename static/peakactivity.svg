@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <!-- SPDX-License-Identifier: MPL-2.0 -->
+  <title id="title">PeakActivity</title>
+  <rect width="512" height="512" rx="112" fill="#142b32"/>
+  <path d="M76 368 216 132l76 128 44-72 104 180H76Z" fill="#72d8bb"/>
+  <path d="m216 132 44 74-44-20-44 20 44-74Z" fill="#f4faf7"/>
+</svg>

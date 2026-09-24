@@ -2,7 +2,9 @@ import { isEqual } from 'lodash';
 import { setActivePinia, createPinia } from 'pinia';
 
 import { useCategoryStore } from '~/stores/categories';
+import { useSettingsStore } from '~/stores/settings';
 import { createMissingParents, defaultCategories, Category } from '~/util/classes';
+import { buildExactRulePattern } from '~/util/categorization';
 
 describe('categories store', () => {
   setActivePinia(createPinia());
@@ -12,13 +14,13 @@ describe('categories store', () => {
     categoryStore.clearAll();
   });
 
-  test('loads default categories', () => {
+  test('loads default categories', async () => {
     // Load categories
     expect(categoryStore.classes).toHaveLength(0);
     categoryStore.restoreDefaultClasses();
 
     expect(categoryStore.classes_unsaved_changes).toBeTruthy();
-    categoryStore.save();
+    await categoryStore.save();
 
     expect(categoryStore.classes_unsaved_changes).toBeFalsy();
     expect(categoryStore.classes).not.toHaveLength(0);
@@ -43,6 +45,49 @@ describe('categories store', () => {
     expect(categoryStore.classes).toHaveLength(0);
     categoryStore.load([{ name: ['Test'], rule: { type: 'none' } }]);
     expect(categoryStore.all_categories).toHaveLength(1);
+  });
+
+  test('accepted correction rules survive category serialization and reload', () => {
+    categoryStore.load([{ name: ['Work'], rule: { type: 'none' } }]);
+    const category = categoryStore.get_category(['Work']);
+    const pattern = buildExactRulePattern('C++ [Plan]');
+    categoryStore.appendClassRule(category.id as number, pattern as string);
+
+    const serialized = JSON.parse(JSON.stringify(categoryStore.classes_clean));
+    categoryStore.load(serialized);
+
+    expect(categoryStore.classes_for_query).toEqual([
+      [['Work'], { type: 'regex', regex: '^C\\+\\+ \\[Plan\\]$' }],
+    ]);
+  });
+
+  test('waits for settings persistence before marking rules saved', async () => {
+    const settingsStore = useSettingsStore();
+    categoryStore.load([{ name: ['Work'], rule: { type: 'none' } }]);
+    categoryStore.appendClassRule(categoryStore.classes[0].id as number, '^Editor$');
+
+    let finishSave = () => {
+      throw new Error('Persistence resolver was not initialized.');
+    };
+    const persistence = new Promise<void>(resolve => {
+      finishSave = resolve;
+    });
+    const update = jest.spyOn(settingsStore, 'update').mockReturnValue(persistence);
+    const previousEnvironment = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const saving = categoryStore.save();
+      expect(saving).toBeInstanceOf(Promise);
+      expect(categoryStore.classes_unsaved_changes).toBe(true);
+      finishSave();
+      await saving;
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(categoryStore.classes_unsaved_changes).toBe(false);
+    } finally {
+      if (previousEnvironment === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnvironment;
+      update.mockRestore();
+    }
   });
 
   test('get category hierarchy', () => {

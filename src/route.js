@@ -19,6 +19,7 @@ const Settings = () => import('./views/settings/Settings.vue');
 // pulling a second copy into a separate chunk.
 const Stopwatch = () => import('./views/Stopwatch.vue');
 const WorkReport = () => import('./views/WorkReport.vue');
+const Freelancer = () => import('./views/Freelancer.vue');
 const Alerts = () => import('./views/Alerts.vue');
 const Search = () => import('./views/Search.vue');
 const Report = () => import('./views/Report.vue');
@@ -38,6 +39,7 @@ const router = new VueRouter({
       },
     },
     { path: '/home', component: Home },
+    { path: '/about', component: () => import('./views/About.vue') },
     {
       path: '/activity/:host/:periodLength?/:date?',
       component: Activity,
@@ -73,15 +75,15 @@ const router = new VueRouter({
     // external links / bookmarks still land somewhere useful.
     { path: '/settings/category-builder', redirect: '/settings/categorization' },
     // :group lets the active settings panel survive reloads / be linkable.
-    // The matcher excludes 'category-builder' so the more specific route above
-    // wins; new groups added in Settings.vue should also be added here.
+    // New groups added in Settings.vue must also be listed here.
     {
-      path: '/settings/:group(general|appearance|categorization|privacy|developer)',
+      path: '/settings/:group(general|appearance|categorization|privacy|ai|data|sync|plugins|developer)',
       component: Settings,
       props: true,
     },
     { path: '/stopwatch', component: Stopwatch },
     { path: '/work-report', component: WorkReport },
+    { path: '/freelancer', component: Freelancer },
     { path: '/search', component: Search },
     { path: '/graph', component: Graph },
     { path: '/dev', component: Dev },

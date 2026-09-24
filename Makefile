@@ -11,7 +11,7 @@ else
 androidflag :=
 endif
 
-prebuild: node_modules/ static/logo.png static/logo.svg
+prebuild: node_modules/ static/peakactivity.svg static/LICENSE.txt
 
 build: prebuild
 	npm run build ${androidflag}
@@ -25,7 +25,7 @@ build-vite: prebuild
 dev-vite: prebuild
 	npx vite
 
-static/logo.%: media/logo/logo.%
+static/LICENSE.txt: LICENSE.txt
 	@mkdir -p static
 	cp $< $@
 

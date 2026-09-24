@@ -26,3 +26,6 @@ test/e2e/reports
 
 # python
 __pycache__
+
+# Copied from the source license during prebuild.
+static/LICENSE.txt

@@ -27,10 +27,22 @@ div
       td {{ bucket.data }}
 
   input-timeinterval(v-model="daterange", :maxDuration="maxDuration")
+  b-button.ml-2(variant="outline-danger" :disabled="!daterange || deletingRange" @click="$root.$emit('bv::show::modal', 'delete-bucket-range')") Delete events in range
+  b-alert.mt-2(v-if="rangeDeleteError" show variant="danger") {{ rangeDeleteError }}
+  b-alert.mt-2(v-if="rangeDeleteCount !== null" show variant="success") Deleted {{ rangeDeleteCount }} events.
 
-  vis-timeline(:buckets="[bucket_with_events]", :showRowLabels="false")
+  vis-timeline(:buckets="[bucket_with_events]", :showRowLabels="false" @events-transformed="updateEvent")
 
-  aw-eventlist(:bucket_id="id", @save="updateEvent", :events="events" editable=true)
+  aw-eventlist(:bucket_id="id", @save="updateEvent", @delete="updateEvent", @split="updateEvent", @merge="updateEvent", :events="events" editable=true)
+
+  b-modal(id="delete-bucket-range" title="Delete events in this time range?" centered hide-footer)
+    p This permanently deletes every event that overlaps or touches the selected interval, plus its correction history.
+    p(v-if="daterange") {{ daterange[0].format() }} to {{ daterange[1].format() }}
+    b-alert(v-if="rangeDeleteError" show variant="danger") {{ rangeDeleteError }}
+    div.text-right
+      b-button.mr-2(:disabled="deletingRange" @click="$root.$emit('bv::hide::modal', 'delete-bucket-range')") Cancel
+      b-button(variant="danger" :disabled="deletingRange || !daterange" @click="deleteRange")
+        | {{ deletingRange ? 'Deleting…' : 'Delete selected events' }}
 </template>
 
 <script lang="ts">
@@ -50,6 +62,9 @@ export default {
       eventcount: '?',
       daterange: null,
       maxDuration: 31 * 24 * 60 * 60,
+      deletingRange: false,
+      rangeDeleteError: '',
+      rangeDeleteCount: null,
     };
   },
   computed: {
@@ -85,14 +100,29 @@ export default {
     getEventCount: async function (bucket_id) {
       this.eventcount = (await getClient().countEvents(bucket_id)).data;
     },
-    updateEvent: function (event) {
-      const i = this.events.findIndex(e => e.id == event.id);
-      if (i != -1) {
-        // This is needed instead of this.events[i] because insides of arrays
-        // are not reactive in Vue.
-        this.$set(this.events, i, event);
-      } else {
-        console.error(':(');
+    updateEvent: async function () {
+      await this.getEvents(this.id);
+      await this.getEventCount(this.id);
+    },
+    deleteRange: async function () {
+      if (!this.daterange || this.deletingRange) return;
+      this.deletingRange = true;
+      this.rangeDeleteError = '';
+      this.rangeDeleteCount = null;
+      try {
+        const response = await this.$aw.req.delete(`/0/buckets/${encodeURIComponent(this.id)}/events`, {
+          params: { start: this.daterange[0].format(), end: this.daterange[1].format() },
+        });
+        this.rangeDeleteCount = response.data;
+        this.$root.$emit('bv::hide::modal', 'delete-bucket-range');
+        await this.getEvents(this.id);
+        await this.getEventCount(this.id);
+      } catch (error) {
+        this.rangeDeleteError = this.rangeDeleteCount === null
+          ? error?.response?.data?.message || 'Events in this range were not deleted.'
+          : 'Events were deleted, but the refreshed event list could not be loaded.';
+      } finally {
+        this.deletingRange = false;
       }
     },
   },

@@ -7,7 +7,7 @@ div
   div(v-if="!bucketId")
     p.text-muted
       | No AFK bucket found on this host. Install
-      | #[a(href="https://docs.activitywatch.net/en/latest/watchers.html") aw-watcher-afk]
+      | the idle collector
       | to use the Timespiral.
   div(v-else)
     p.small.text-muted Bucket: #[code {{ bucketId }}] &middot; Events: {{ events.length }}

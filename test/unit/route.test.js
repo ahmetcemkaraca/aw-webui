@@ -21,4 +21,16 @@ describe('router', () => {
     expect(workReportRoute).toBeTruthy();
     expect(typeof workReportRoute.component).toBe('function');
   });
+
+  test('includes the data lifecycle settings route', () => {
+    const match = router.match('/settings/data');
+    expect(match.matched.some(route => route.path.includes(':group('))).toBe(true);
+    expect(match.params.group).toBe('data');
+  });
+
+  test('includes the shared E2EE sync settings route', () => {
+    const match = router.match('/settings/sync');
+    expect(match.matched.some(route => route.path.includes(':group('))).toBe(true);
+    expect(match.params.group).toBe('sync');
+  });
 });

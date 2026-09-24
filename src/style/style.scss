@@ -31,3 +31,24 @@ body {
   border: 1px solid $lightBorderColor;
   border-radius: 5px;
 }
+
+:focus-visible {
+  outline: 3px solid $activeHighlightColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+  .aw-container { border-color: CanvasText; }
+}

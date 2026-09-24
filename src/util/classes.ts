@@ -67,8 +67,8 @@ export const defaultCategories: Category[] = [
     },
   },
   {
-    name: ['Work', 'Programming', 'ActivityWatch'],
-    rule: { type: 'regex', regex: 'ActivityWatch|aw-', ignore_case: true },
+    name: ['Work', 'Programming', 'PeakActivity'],
+    rule: { type: 'regex', regex: 'PeakActivity|ActivityWatch|aw-', ignore_case: true },
   },
   { name: ['Work', 'Image'], rule: { type: 'regex', regex: 'GIMP|Inkscape' } },
   { name: ['Work', 'Video'], rule: { type: 'regex', regex: 'Kdenlive' } },
@@ -192,17 +192,6 @@ function areWeTesting() {
   return process.env.NODE_ENV === 'test';
 }
 
-export function saveClasses(classes: Category[]) {
-  if (areWeTesting()) {
-    // TODO: move this into settings store?
-    console.log('Not saving classes in test mode');
-    return;
-  }
-  const settingsStore = useSettingsStore();
-  settingsStore.update({ classes: classes.map(cleanCategory) });
-  console.log('Saved classes', settingsStore.classes);
-}
-
 export function cleanCategory(cat: Category): Category {
   cat = _.cloneDeep(cat);
   delete cat.children;
@@ -227,7 +216,7 @@ export function loadClasses(): Category[] {
  * Persist category sets and active set IDs to the settings store.
  * Also updates the legacy `classes` field for backwards compatibility with external readers.
  */
-export function saveCategories(sets: CategorySet[], activeIds: string[]) {
+export async function saveCategories(sets: CategorySet[], activeIds: string[]): Promise<void> {
   if (areWeTesting()) {
     console.log('Not saving categories in test mode');
     return;
@@ -237,7 +226,7 @@ export function saveCategories(sets: CategorySet[], activeIds: string[]) {
   const effectiveClasses = mergeCategorySets(sets.filter(s => activeIds.includes(s.id))).map(
     cleanCategory
   );
-  settingsStore.update({
+  await settingsStore.update({
     category_sets: cleanSets,
     active_set_ids: activeIds,
     classes: effectiveClasses,

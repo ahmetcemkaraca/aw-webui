@@ -1,4 +1,9 @@
-import { findCommonPhrases } from '~/util/categorization';
+import {
+  buildExactRulePattern,
+  findCommonPhrases,
+  sortWordEntries,
+  summarizeSuggestionEvents,
+} from '~/util/categorization';
 import { IEvent } from '~/util/interfaces';
 
 function makeEvent(title: string, duration: number): IEvent {
@@ -12,6 +17,37 @@ function makeEvent(title: string, duration: number): IEvent {
 describe('findCommonPhrases', () => {
   test('returns empty map for empty events', () => {
     expect(findCommonPhrases([], [])).toEqual(new Map());
+  });
+
+  test('ranks equal-duration suggestions alphabetically', () => {
+    expect(
+      sortWordEntries([
+        { word: 'Zulu', duration: 100, events: [] },
+        { word: 'Alpha', duration: 100, events: [] },
+      ]).map(entry => entry.word)
+    ).toEqual(['Alpha', 'Zulu']);
+  });
+
+  test('counts an event only once in a bulk-rule preview', () => {
+    const event = makeEvent('Editor Editor', 100);
+    expect(summarizeSuggestionEvents([event, event])).toEqual({ events: 1, duration: 100 });
+  });
+
+  test('builds an anchored literal pattern from a corrected field value', () => {
+    const pattern = buildExactRulePattern('C++ [Plan]');
+    expect(pattern).toBe('^C\\+\\+ \\[Plan\\]$');
+    expect(new RegExp(pattern || '').test('C++ [Plan]')).toBe(true);
+    expect(new RegExp(pattern || '').test('C++ [Plan] - Draft')).toBe(false);
+    expect(buildExactRulePattern('   ')).toBeNull();
+  });
+
+  test('uses the application name when privacy settings hide the title', () => {
+    const event = {
+      timestamp: new Date().toISOString(),
+      duration: 100,
+      data: { app: 'Editor' },
+    } as IEvent;
+    expect(findCommonPhrases([event], []).get('Editor')?.duration).toBe(100);
   });
 
   test('counts single words by duration', () => {

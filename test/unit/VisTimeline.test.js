@@ -53,6 +53,29 @@ function makeWheelEvent(overrides = {}) {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('VisTimeline zoom-anchor regression (#847)', () => {
+  test('accessible table keeps event data and filters by visible activity text', () => {
+    const rows = [{
+      bucketId: 'aw-watcher-window_test',
+      title: 'Editor',
+      start: new Date('2026-09-22T10:00:00Z'),
+      end: new Date('2026-09-22T10:00:10Z'),
+      color: '#fff',
+      event: { id: 3, timestamp: '2026-09-22T10:00:00Z', duration: 10, data: { app: 'Editor' } },
+      swimlane: 'Editor',
+    }];
+    const accessible = VisTimeline.computed.accessibleRows.call({ chartData: rows, accessibleFilter: 'edit' });
+    expect(accessible).toHaveLength(1);
+    expect(accessible[0].activity).toBe('Editor');
+    expect(accessible[0].source).toBe('aw-watcher-window_test');
+    expect(VisTimeline.computed.accessibleRows.call({ chartData: rows, accessibleFilter: 'browser' })).toHaveLength(0);
+  });
+
+  test('accessible table exposes named columns for activity details', () => {
+    expect(VisTimeline.computed.accessibleFields.call({}).map(field => field.label)).toEqual([
+      'Start time', 'Duration', 'Activity', 'Data source', 'Actions',
+    ]);
+  });
+
   describe('preferZoom option', () => {
     test('is set to true so vis-timeline does not pan after a vertical zoom step', () => {
       // Calling data() without a full Vue instance is safe here because the

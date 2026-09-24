@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "input": {
+    "periods": [
+      "2026-06-01T04:00:00+02:00/2026-06-02T04:00:00+02:00",
+      "2026-06-02T04:00:00+02:00/2026-06-03T04:00:00+02:00"
+    ],
+    "break_time_seconds": 60,
+    "host_ids": ["laptop"],
+    "category_paths": [["Work"]],
+    "date_range": "custom",
+    "start_of_day": "04:00",
+    "results": [
+      {
+        "duration": 120,
+        "events": [
+          {"timestamp": "2026-06-01T04:00:00+02:00", "duration": 60},
+          {"timestamp": "2026-06-01T04:02:00+02:00", "duration": 30},
+          {"timestamp": "2026-06-01T04:05:00+02:00", "duration": 30}
+        ]
+      },
+      {"duration": 0, "events": []}
+    ]
+  },
+  "expected": {
+    "daily": [
+      {"date": "2026-06-01", "duration": 180, "sessions": 3, "avgSession": 60},
+      {"date": "2026-06-02", "duration": 0, "sessions": 0, "avgSession": 0}
+    ],
+    "manifest": {
+      "schema_version": 1,
+      "method_id": "work-time-report",
+      "method_version": 1,
+      "formula": "query duration plus positive adjacent gaps no greater than the selected break time",
+      "input_periods": [
+        "2026-06-01T04:00:00+02:00/2026-06-02T04:00:00+02:00",
+        "2026-06-02T04:00:00+02:00/2026-06-03T04:00:00+02:00"
+      ],
+      "host_ids": ["laptop"],
+      "category_paths": [["Work"]],
+      "date_range": "custom",
+      "start_of_day": "04:00",
+      "break_time_seconds": 60,
+      "coverage": {
+        "requested_periods": 2,
+        "periods_with_events": 1,
+        "events_seen": 3,
+        "source_health": "unknown",
+        "limitation": "An empty period cannot distinguish no activity from missing capture."
+      }
+    }
+  }
+}

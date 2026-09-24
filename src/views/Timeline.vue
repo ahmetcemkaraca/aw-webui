@@ -99,7 +99,7 @@ div
     | No events match selected criteria. Timeline is not updated.
 
   div(v-if="buckets !== null")
-    vis-timeline(:buckets="buckets", :showRowLabels='true', :queriedInterval="daterange", :swimlane="swimlane", :updateTimelineWindow='updateTimelineWindow')
+    vis-timeline(:buckets="buckets", :showRowLabels='true', :queriedInterval="daterange", :swimlane="swimlane", :updateTimelineWindow='updateTimelineWindow' @events-transformed="getBuckets")
 
     aw-devonly(reason="Not ready for production, still experimenting")
       aw-calendar(:buckets="buckets")

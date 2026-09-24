@@ -11,7 +11,7 @@ div
       span(v-else)
         .aw-loading Loading...
   small.text-muted
-    | The page to open when opening ActivityWatch, or clicking the logo in the top menu.
+    | The page to open when opening PeakActivity, or clicking the logo in the top menu.
 </template>
 
 <script lang="ts">

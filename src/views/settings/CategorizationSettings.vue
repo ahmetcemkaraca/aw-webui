@@ -3,8 +3,8 @@ div
   p.mb-2
     | Rules for categorizing events. An event can only have one category. If several categories match, the deepest one will be chosen.
   p
-    | Find and share categorization rule presets on #[a(href="https://forum.activitywatch.net/c/projects/category-rules") the forum].
-    | For help on how to write categorization rules, see #[a(href="https://docs.activitywatch.net/en/latest/features/categorization.html") the documentation].
+    | Create rules to organize your local activity into categories.
+    | Review each rule against sample activity before saving it.
 
   // Category set switcher. bg-light + .rounded so dark.css's .bg-light
   // override flips the background in dark mode instead of leaving an
@@ -256,12 +256,12 @@ export default {
       this.categoryStore.createSet(name);
       this.categoryStore.switchToSet(name);
     },
-    deleteActiveSet: function () {
+    deleteActiveSet: async function () {
       const id = this.categoryStore.active_set_ids[0];
       if (!id) return;
       if (!confirm(`Delete category set "${id}"? This cannot be undone.`)) return;
       this.categoryStore.deleteSet(id);
-      this.categoryStore.save();
+      await this.categoryStore.save();
     },
     onSetChange: function (setId: string) {
       if (this.classes_unsaved_changes) {

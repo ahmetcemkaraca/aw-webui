@@ -31,6 +31,7 @@ interface State {
   durationDefault: number;
   useColorFallback: boolean;
   landingpage: string;
+  setupComplete: boolean;
   theme: 'light' | 'dark' | 'auto';
 
   newReleaseCheckData: Record<string, any>;
@@ -57,12 +58,14 @@ interface State {
   active_set_ids: string[];
   views: View[];
   saved_queries: SavedQuery[];
+  ignoredCategorySuggestions: string[];
 
   // Whether to show certain WIP features
   devmode: boolean;
   showYearly: boolean;
   useMultidevice: boolean;
   requestTimeout: number;
+  rawRetentionDays: number;
 
   // Set to true if settings loaded
   _loaded: boolean;
@@ -77,17 +80,18 @@ export const useSettingsStore = defineStore('settings', {
     durationDefault: 4 * 60 * 60,
     useColorFallback: false,
     landingpage: '/home',
+    setupComplete: false,
 
     theme: 'auto',
 
     newReleaseCheckData: {
-      isEnabled: true,
+      isEnabled: false,
       nextCheckTime: moment().add(SHORT_BACKOFF_PERIOD, 'seconds'),
       howOftenToCheck: SHORT_BACKOFF_PERIOD,
       timesChecked: 0,
     },
     userSatisfactionPollData: {
-      isEnabled: true,
+      isEnabled: false,
       nextPollTime: moment().add(INITIAL_WAIT_PERIOD, 'seconds'),
       timesPollIsShown: 0,
     },
@@ -104,6 +108,7 @@ export const useSettingsStore = defineStore('settings', {
     active_set_ids: ['default'],
     views: defaultViews,
     saved_queries: [],
+    ignoredCategorySuggestions: [],
 
     // Developer settings
     // NOTE: PRODUCTION might be undefined (in tests, for example)
@@ -111,6 +116,7 @@ export const useSettingsStore = defineStore('settings', {
     showYearly: false,
     useMultidevice: false,
     requestTimeout: 30,
+    rawRetentionDays: 0,
 
     _loaded: false,
   }),

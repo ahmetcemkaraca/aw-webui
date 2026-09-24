@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "input": {
+    "periods": [
+      "2026-03-28T04:00:00+01:00/2026-03-29T04:00:00+02:00",
+      "2026-03-29T04:00:00+02:00/2026-03-30T04:00:00+02:00",
+      "2026-10-24T04:00:00+02:00/2026-10-25T04:00:00+01:00",
+      "2026-10-25T04:00:00+01:00/2026-10-26T04:00:00+01:00"
+    ],
+    "results": [
+      { "duration": 10, "events": [] },
+      { "duration": 20, "events": [] },
+      { "duration": 30, "events": [] },
+      { "duration": 40, "events": [] }
+    ]
+  },
+  "expected": {
+    "dates": ["2026-03-28", "2026-03-29", "2026-10-24", "2026-10-25"],
+    "period_hours": [23, 24, 25, 24],
+    "source_coverage": {
+      "method_id": "work-report-source-coverage",
+      "method_version": 1,
+      "available_source_buckets": [
+        "aw-watcher-afk_laptop",
+        "aw-watcher-afk_tablet",
+        "aw-watcher-window_laptop",
+        "aw-watcher-window_phone"
+      ],
+      "queried_source_buckets": ["aw-watcher-afk_laptop", "aw-watcher-window_laptop"],
+      "queried_periods": ["start/end", "previous-start/previous-end"],
+      "partial_periods": ["2026-06-03"],
+      "limited_periods": [],
+      "source_row_limit": 1000,
+      "report_row_limit": 2000,
+      "timezone": "Europe/Berlin",
+      "source_health": "unknown",
+      "clock_skew": {
+        "status": "unknown",
+        "correction_bound_seconds": 0,
+        "limitation": "No device clock correction is applied; multi-device alignment is unknown."
+      }
+    }
+  }
+}

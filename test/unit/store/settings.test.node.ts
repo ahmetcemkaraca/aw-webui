@@ -35,6 +35,7 @@ describe('settings store', () => {
   });
 
   test('update waits for settings to load before patching state', async () => {
+    const ignoredCategorySuggestions = ['Browser'];
     const savedQueries = [
       {
         id: 'daily-coding-time',
@@ -50,17 +51,24 @@ describe('settings store', () => {
     jest.spyOn(settingsStore, 'ensureLoaded').mockImplementation(async () => {
       steps.push('ensureLoaded');
       expect(settingsStore.saved_queries).toEqual([]);
+      expect(settingsStore.ignoredCategorySuggestions).toEqual([]);
       settingsStore.$patch({ _loaded: true });
     });
 
     jest.spyOn(settingsStore, 'save').mockImplementation(async () => {
       steps.push('save');
       expect(settingsStore.saved_queries).toEqual(savedQueries);
+      expect(settingsStore.ignoredCategorySuggestions).toEqual(ignoredCategorySuggestions);
     });
 
-    await settingsStore.update({ saved_queries: savedQueries });
+    await settingsStore.update({ saved_queries: savedQueries, ignoredCategorySuggestions });
 
     expect(steps).toEqual(['ensureLoaded', 'save']);
     expect(settingsStore.saved_queries).toEqual(savedQueries);
+    expect(settingsStore.ignoredCategorySuggestions).toEqual(ignoredCategorySuggestions);
+  });
+
+  test('ignored category suggestions default to an empty persisted setting', () => {
+    expect(settingsStore.ignoredCategorySuggestions).toEqual([]);
   });
 });

@@ -1,12 +1,44 @@
 <template lang="pug">
   div
-    div#visualization
+    div#visualization(role="group" aria-label="Activity timeline chart")
+
+    details.mt-2(v-if="chartData.length" @toggle="accessibleTableOpen = $event.target.open")
+      summary Read timeline activities as a table
+      div.mt-2(v-if="accessibleTableOpen")
+        p.small.text-muted The table contains the same filtered events as the timeline chart.
+        label.sr-only(for="timeline-table-filter") Filter timeline activities
+        b-form-input#timeline-table-filter.mb-2(v-model="accessibleFilter" type="search" aria-label="Filter timeline activities")
+        b-table(
+          :items="accessibleRows"
+          :fields="accessibleFields"
+          :per-page="accessiblePageSize"
+          :current-page.sync="accessiblePage"
+          small
+          responsive
+          show-empty
+          empty-text="No activities match this filter."
+        )
+          template(v-slot:cell(time)="row")
+            time(:datetime="row.item.event.timestamp") {{ new Date(row.item.event.timestamp).toLocaleString('en') }}
+          template(v-slot:cell(duration)="row") {{ row.item.event.duration | friendlyduration }}
+          template(v-slot:cell(activity)="row") {{ row.item.title }}
+          template(v-slot:cell(source)="row") {{ row.item.bucketId }}
+          template(v-slot:cell(actions)="row")
+            b-button(size="sm" variant="outline-secondary" :disabled="!row.item.event.id || ['events','search'].includes(row.item.bucketId)" @click="editAccessibleEvent(row.item)") Edit activity
+        b-pagination(v-model="accessiblePage" :total-rows="accessibleRows.length" :per-page="accessiblePageSize" aria-label="Timeline pages")
 
     div.small.text-muted.my-2(v-if="bucketsFromEither.length != 1")
       i Buckets with no events in the queried range will be hidden.
 
     div(v-if="editingEvent")
-      EventEditor(:event="editingEvent" :bucket_id="editingEventBucket")
+      EventEditor(
+        :event="editingEvent"
+        :bucket_id="editingEventBucket"
+        :events="editingBucketEvents"
+        @close="clearEditor"
+        @split="eventsTransformed"
+        @merge="eventsTransformed"
+      )
 </template>
 
 <style lang="scss">
@@ -117,6 +149,10 @@ export default {
       },
       editingEvent: null,
       editingEventBucket: null,
+      accessibleTableOpen: false,
+      accessiblePage: 1,
+      accessiblePageSize: 50,
+      accessibleFilter: '',
 
       updateHasRun: false,
     };
@@ -168,6 +204,34 @@ export default {
       });
       return data;
     },
+    editingBucketEvents(): IEvent[] {
+      if (!this.editingEventBucket) return [];
+      return this.chartData
+        .filter(item => item.bucketId === this.editingEventBucket)
+        .map(item => item.event);
+    },
+    accessibleFields() {
+      return [
+        { key: 'time', label: 'Start time', sortable: true },
+        { key: 'duration', label: 'Duration', sortable: true },
+        { key: 'activity', label: 'Activity', sortable: true },
+        { key: 'source', label: 'Data source', sortable: true },
+        { key: 'actions', label: 'Actions' },
+      ];
+    },
+    accessibleRows(): any[] {
+      const query = this.accessibleFilter.trim().toLocaleLowerCase();
+      const rows = this.chartData.map(item => ({
+        ...item,
+        time: item.event.timestamp,
+        duration: item.event.duration,
+        activity: item.title,
+        source: item.bucketId,
+      }));
+      if (!query) return rows;
+      return rows.filter(item => [item.time, item.activity, item.source]
+        .some(value => String(value).toLocaleLowerCase().includes(query)));
+    },
   },
   watch: {
     buckets() {
@@ -177,6 +241,7 @@ export default {
         return;
       }
 
+      this.accessiblePage = 1;
       this.update();
     },
     events() {
@@ -184,8 +249,10 @@ export default {
         return;
       }
 
+      this.accessiblePage = 1;
       this.update();
     },
+    accessibleFilter() { this.accessiblePage = 1; },
   },
   mounted() {
     this.$nextTick(() => {
@@ -236,6 +303,20 @@ export default {
     },
     openEditor: function () {
       this.$bvModal.show('edit-modal-' + this.editingEvent.id);
+    },
+    clearEditor() {
+      this.editingEvent = null;
+      this.editingEventBucket = null;
+    },
+    async editAccessibleEvent(item: IChartDataItem) {
+      if (!item.event.id || item.bucketId === 'events' || item.bucketId === 'search') return;
+      this.editingEvent = await this.$aw.getEvent(item.bucketId, item.event.id);
+      this.editingEventBucket = item.bucketId;
+      this.$nextTick(() => this.openEditor());
+    },
+    eventsTransformed() {
+      this.clearEditor();
+      this.$emit('events-transformed');
     },
     onSelect: async function (properties) {
       if (properties.items.length == 0) {

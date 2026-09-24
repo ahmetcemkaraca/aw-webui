@@ -4,8 +4,11 @@ div
   //       Currently, more than one event-editor on the same view can lead to multiple event-editors opening.
   event-editor(
     v-if="editable"
-    :event="editableEvent", :bucket_id="bucket_id",
+    :event="editableEvent", :bucket_id="bucket_id", :events="events"
     @save="(e) => $emit('save', e)", @delete="removeEvent"
+    @split="(events) => $emit('split', events)"
+    @merge="(event) => $emit('merge', event)"
+    @close="closeEditor"
   )
   b-card.event-container(no-block=true)
     span(slot="header")
@@ -154,13 +157,13 @@ export default {
         this.$bvModal.show('edit-modal-' + event.id);
       });
     },
+    closeEditor() { this.editableEvent = null; },
     expandList: function () {
       this.isListExpanded = !this.isListExpanded;
       console.log('List should be expanding: ', this.isListExpanded);
     },
     removeEvent: function (_event) {
-      // FIXME: Illegal mutation of prop, need to propagate upwards or move into vuex.
-      //this.events = this.events.filter(e => e.id != event.id);
+      this.$emit('delete', _event);
     },
   },
 };

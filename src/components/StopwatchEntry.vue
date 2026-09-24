@@ -20,7 +20,15 @@ div
       b-button.mx-1(v-b-modal="'edit-modal-' + event.id", variant="outline-dark", size="sm")
         icon.ml-0.mr-1(name="edit")
         | Edit
-  event-editor(:event="event", :bucket_id="bucket_id", @save="save", @delete="delete_")
+  b-alert(v-if="stopError" show variant="danger") {{ stopError }}
+  event-editor(
+    :event="event"
+    :bucket_id="bucket_id"
+    @save="save"
+    @delete="delete_"
+    @split="refresh"
+    @merge="refresh"
+  )
 </template>
 
 <style scoped lang="scss">
@@ -59,13 +67,22 @@ export default {
       default: moment(),
     },
   },
+  data() { return { stopError: '' }; },
   methods: {
     stop: async function () {
       const new_event = JSON.parse(JSON.stringify(this.event));
       new_event.data.running = false;
       new_event.duration = moment().diff(moment(new_event.timestamp)) / 1000;
-      await this.$aw.replaceEvent(this.bucket_id, new_event);
-      this.$emit('update', new_event);
+      this.stopError = '';
+      try {
+        const response = await this.$aw.req.put(
+          `/0/buckets/${encodeURIComponent(this.bucket_id)}/events/${new_event.id}`,
+          new_event
+        );
+        this.$emit('update', response.data);
+      } catch (error) {
+        this.stopError = error?.response?.data?.message || 'The stopwatch could not be stopped.';
+      }
     },
     save: async function (new_event) {
       this.$emit('update', new_event);
@@ -73,6 +90,7 @@ export default {
     delete_: async function (new_event) {
       this.$emit('delete', new_event);
     },
+    refresh() { this.$emit('refresh'); },
   },
 };
 </script>
