@@ -1,4 +1,5 @@
 import { AWClient } from 'aw-client';
+import { AxiosHeaders } from 'axios';
 
 import { useSettingsStore } from '~/stores/settings';
 
@@ -136,7 +137,7 @@ export function createClient(force?: boolean): AWClient {
     discardLegacyUrlToken();
     _client.req.interceptors.request.use(async config => {
       const token = await authorizeLocalSession();
-      config.headers = config.headers || {};
+      config.headers = AxiosHeaders.from(config.headers);
       config.headers.Authorization = `Bearer ${token}`;
       return config;
     });

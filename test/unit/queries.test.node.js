@@ -46,6 +46,10 @@ test('manual stopwatch query does not depend on window or idle buckets', () => {
   expect(query).not.toContain('aw-watcher-afk');
 });
 
+test('default query export exposes the manual stopwatch query used by the activity store', () => {
+  expect(queries.default.stopwatchOnlyQuery).toBe(queries.stopwatchOnlyQuery);
+});
+
 test('generate fullDesktopQuery', () => {
   let query = queries.fullDesktopQuery(queryParams).join('\n');
   expect(query).toMatchSnapshot();

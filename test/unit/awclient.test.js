@@ -34,6 +34,11 @@ describe('native local session bootstrap', () => {
     expect(values).toEqual(['a'.repeat(64), 'a'.repeat(64)]);
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(sessionStorage.length).toBe(0);
+    const client = api.createClient();
+    const intercept = client.req.interceptors.request.use.mock.calls[0][0];
+    expect((await intercept({ headers: {} })).headers.Authorization).toBe(`Bearer ${'a'.repeat(64)}`);
+    const config = await intercept({ headers: { 'X-Synthetic': 'preserved' } });
+    expect(config.headers.get('X-Synthetic')).toBe('preserved');
     api.clearLocalSession();
     await api.authorizeLocalSession();
     expect(invoke).toHaveBeenCalledTimes(2);
