@@ -469,6 +469,7 @@ export function categoryQuery(
 export default {
   fullDesktopQuery,
   multideviceQuery,
+  stopwatchOnlyQuery,
   appQuery,
   activityQuery,
   activityQueryAndroid,

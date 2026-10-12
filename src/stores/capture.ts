@@ -17,7 +17,7 @@ export interface CapturePolicy {
 }
 
 async function native(command: string, args?: object): Promise<unknown> {
-  const bridge = (window as unknown as { __TAURI__?: { core: { invoke: (name: string) => Promise<unknown> } } }).__TAURI__;
+  const bridge = (window as unknown as { __TAURI__?: { core: { invoke: (name: string, values?: object) => Promise<unknown> } } }).__TAURI__;
   if (!bridge) throw new Error('Open Privacy controls in PeakActivity desktop.');
   return bridge.core.invoke(command, args);
 }

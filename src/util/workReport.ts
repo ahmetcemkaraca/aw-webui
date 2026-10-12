@@ -70,9 +70,6 @@ export interface WorkReportWindowsV1 {
   current: string[];
   previous: string[] | null;
   partial_periods: string[];
-  limited_periods: string[];
-  source_row_limit: number;
-  report_row_limit: number;
 }
 
 export interface WorkReportSourceCoverageV1 {
@@ -82,6 +79,9 @@ export interface WorkReportSourceCoverageV1 {
   queried_source_buckets: string[];
   queried_periods: string[];
   partial_periods: string[];
+  limited_periods: string[];
+  source_row_limit: number;
+  report_row_limit: number;
   timezone: string;
   source_health: 'unknown';
   clock_skew: {

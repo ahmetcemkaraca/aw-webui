@@ -316,6 +316,7 @@ export function buildApprovedTimesheet(input: ApprovedTimesheetInputV1): Approve
   const note = input.user_note ?? null;
   if (note !== null && (typeof note !== 'string'
       || new TextEncoder().encode(note).length > APPROVED_TIMESHEET_MAX_NOTE_BYTES_V1
+      // eslint-disable-next-line no-control-regex -- Approved notes deliberately reject C0 and DEL controls.
       || /[\u0000-\u001f\u007f]/.test(note))) {
     throw new TypeError('The user note is invalid or too long.');
   }
