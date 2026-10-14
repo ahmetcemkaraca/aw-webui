@@ -22,6 +22,8 @@ interface State {
   category_sets: CategorySet[];
   // Ordered list of active set IDs; first entry has highest priority when merging
   active_set_ids: string[];
+  _savedPolicy: ReturnType<typeof policySnapshot> | null;
+  _pendingPolicyWrites: number;
 }
 
 function getScoreFromCategory(c: Category, allCats: Category[]): number {
@@ -58,8 +60,7 @@ function assignIds(classes: Category[]): Category[] {
 
 /** Recompute the effective `classes` list from the provided active sets. */
 function computeEffectiveClasses(categorySets: CategorySet[], activeSetIds: string[]): Category[] {
-  const activeSets = categorySets.filter(s => activeSetIds.includes(s.id));
-  const merged = mergeCategorySets(activeSets);
+  const merged = mergeCategorySets(categorySets, activeSetIds);
   return assignIds(createMissingParents(merged));
 }
 
@@ -83,16 +84,36 @@ function syncToPrimarySet(state: State) {
   }
 }
 
+function policySnapshot(state: Pick<State, 'classes' | 'category_sets' | 'active_set_ids'>) {
+  return {
+    classes: state.classes.map(cleanCategory),
+    category_sets: state.category_sets.map(set => ({
+      ..._.cloneDeep(set),
+      categories: set.categories.map(cleanCategory),
+    })),
+    active_set_ids: _.cloneDeep(state.active_set_ids),
+  };
+}
+
 export const useCategoryStore = defineStore('categories', {
   state: (): State => ({
     classes: [],
     classes_unsaved_changes: false,
     category_sets: [],
     active_set_ids: ['default'],
+    _savedPolicy: null,
+    _pendingPolicyWrites: 0,
   }),
 
   // getters
   getters: {
+    hasPolicyDraft(state: State): boolean {
+      return (
+        state._pendingPolicyWrites > 0 ||
+        state.classes_unsaved_changes ||
+        (state._savedPolicy !== null && !_.isEqual(policySnapshot(state), state._savedPolicy))
+      );
+    },
     classes_clean(): Category[] {
       return this.classes.map(cleanCategory);
     },
@@ -192,27 +213,35 @@ export const useCategoryStore = defineStore('categories', {
     load(this: State, classes?: Category[]) {
       if (classes !== undefined) {
         // Explicit categories provided (test / programmatic path)
-        classes = createMissingParents(classes);
+        classes = createMissingParents(_.cloneDeep(classes));
         this.classes = assignIds(classes);
         this.classes_unsaved_changes = false;
+        this._savedPolicy = policySnapshot(this);
         return;
       }
 
       // Load sets from settings store
       const { sets, activeIds } = loadCategories();
-      this.category_sets = sets;
-      this.active_set_ids = activeIds;
+      this.category_sets = _.cloneDeep(sets);
+      this.active_set_ids = _.cloneDeep(activeIds);
 
       // Compute effective classes from active sets (merged in priority order)
       this.classes = computeEffectiveClasses(this.category_sets, this.active_set_ids);
       this.classes_unsaved_changes = false;
+      this._savedPolicy = policySnapshot(this);
     },
 
     async save(this: State) {
-      // Sync current classes back to the primary active set before persisting
-      syncToPrimarySet(this);
-      await saveCategories(this.category_sets, this.active_set_ids);
-      this.classes_unsaved_changes = false;
+      this._pendingPolicyWrites++;
+      try {
+        syncToPrimarySet(this);
+        const saved = policySnapshot(this);
+        await saveCategories(saved.category_sets, saved.active_set_ids);
+        this._savedPolicy = saved;
+        this.classes_unsaved_changes = !_.isEqual(policySnapshot(this), saved);
+      } finally {
+        this._pendingPolicyWrites--;
+      }
     },
 
     // ── Category set management ──────────────────────────────────────────────
@@ -366,6 +395,7 @@ export const useCategoryStore = defineStore('categories', {
       this.classes_unsaved_changes = true;
     },
     clearAll(this: State) {
+      this._savedPolicy = null;
       this.classes = [];
       this.classes_unsaved_changes = true;
     },

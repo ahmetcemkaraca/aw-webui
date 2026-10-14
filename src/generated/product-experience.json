@@ -460,7 +460,7 @@
       "summary": "Local reports computed from retained activity."
     },
     {
-      "basis": "Planned Local Pro functionality; it does not include AI or network access.",
+      "basis": "Selected native/UI source and isolated host PDF checks cover reviewed atomic imports and cancellation acknowledgment; production entitlement trust and final desktop device acceptance remain open.",
       "data_egress": "none",
       "evidence_paths": [
         "docs/roadmap.md"
@@ -475,8 +475,8 @@
         "linux"
       ],
       "product": "desktop",
-      "status": "Planned",
-      "summary": "Advanced deterministic local reports."
+      "status": "Experimental",
+      "summary": "Versioned local report templates and rule packs with frozen native calculations."
     },
     {
       "basis": "Planned; supported destinations and data scopes are not yet released.",
@@ -519,16 +519,14 @@
       "summary": "Explicit user-created stopwatch entries."
     },
     {
-      "basis": "Planned; no verified update delivery is shipped.",
-      "data_egress": "service",
+      "basis": "Experimental native source and host checks verify immutable OpenPGP release bundles locally without an account or unlocked vault. Production trust is Not configured; delivery, installation, public readback, platform signatures, release freshness and key lifecycle remain unverified.",
+      "data_egress": "none",
       "evidence_paths": [
-        "docs/roadmap.md"
+        "docs/update-integrity.md"
       ],
       "id": "desktop-update-integrity",
-      "offline": false,
-      "permissions": [
-        "network"
-      ],
+      "offline": true,
+      "permissions": [],
       "plan": "Community",
       "platforms": [
         "windows",
@@ -536,14 +534,14 @@
         "linux"
       ],
       "product": "desktop",
-      "status": "Planned",
-      "summary": "Verified desktop update and release-integrity flow."
+      "status": "Experimental",
+      "summary": "Offline verification of local desktop release bundles."
     },
     {
-      "basis": "Planned; no user-facing notification history is implemented.",
+      "basis": "Experimental encrypted local history and desktop settings; host and mocked UI checks exist. OS delivery and device acceptance remain unverified.",
       "data_egress": "none",
       "evidence_paths": [
-        "docs/roadmap.md"
+        "docs/notification-history.md"
       ],
       "id": "notification-history",
       "offline": true,
@@ -555,7 +553,7 @@
         "linux"
       ],
       "product": "desktop",
-      "status": "Planned",
+      "status": "Experimental",
       "summary": "Local history of actionable desktop notifications."
     },
     {

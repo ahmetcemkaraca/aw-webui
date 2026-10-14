@@ -1,6 +1,12 @@
 <template lang="pug">
 div#wrapper
-  main.container.py-5(v-if="loadError" role="alert")
+  nav.container.py-2(v-if="!showUpdates && (loadError || !vaultStore.isReady || !loaded || !setupComplete)" aria-label="Local app controls")
+    b-button(variant="outline-secondary" aria-label="Open Updates without unlocking the vault" @click="showUpdates = true") Updates
+  main.container.py-5(v-if="showUpdates" aria-labelledby="updates-title")
+    h1.h4#updates-title Updates
+    b-button.mb-3(variant="outline-secondary" aria-label="Back to local app" @click="closeUpdates") Back to local app
+    update-settings
+  main.container.py-5(v-else-if="loadError" role="alert")
     h1.h4 Cannot connect to your local vault
     p {{ loadError }}
     button.btn.btn-primary(type="button" @click="initialize") Try again
@@ -67,12 +73,13 @@ div#wrapper
 <script lang="ts">
 import CaptureControls from '~/components/CaptureControls.vue';
 import Onboarding from '~/views/Onboarding.vue';
+import UpdateSettings from '~/views/settings/UpdateSettings.vue';
 import { useSettingsStore } from '~/stores/settings';
 import { useServerStore } from '~/stores/server';
 import { useVaultStore } from '~/stores/vault';
 import { clearDecryptedState } from '~/stores/clearDecryptedState';
 import { clearLocalSession } from '~/util/awclient';
-import { detectPreferredTheme } from '~/util/theme';
+import { applyTheme } from '~/util/theme';
 
 const SETUP_KEY = 'peakactivity.setup';
 
@@ -85,10 +92,12 @@ function setSetupState(state: string): void {
 }
 
 export default {
-  components: { CaptureControls, Onboarding },
+  components: { CaptureControls, Onboarding, UpdateSettings },
   data() {
     return {
       loaded: false,
+      showUpdates: this.$route.path === '/settings/updates',
+      initialization: 0,
       setupComplete: false,
       newVault: false,
       loadError: '',
@@ -107,59 +116,72 @@ export default {
   created() { this.initialize(); },
   mounted() { this.vaultCheckTimer = window.setInterval(() => this.checkVaultState(), 15000); },
   beforeDestroy() {
+    this.initialization++;
     if (this.pollTimer !== null) window.clearTimeout(this.pollTimer);
     if (this.vaultCheckTimer !== null) window.clearInterval(this.vaultCheckTimer);
     this.recoveryCode = '';
   },
   methods: {
+    closeUpdates() {
+      this.loaded = false;
+      this.showUpdates = false;
+      this.initialize();
+    },
     async initialize() {
+      if (this.showUpdates) return;
+      const current = ++this.initialization;
       this.loadError = '';
-      await this.vaultStore.refresh();
-      if (this.vaultStore.status?.state === 'opening') {
+      const status = await this.vaultStore.refresh();
+      if (this.showUpdates || current !== this.initialization) return;
+      this.vaultStore.status = status;
+      if (!status) {
+        this.loadError = 'The local vault status could not be confirmed. Try again or open Updates.';
+      }
+      if (status?.state === 'opening') {
+        this.recoveryCode = this.vaultStore.recoveryCode = '';
         if (this.pollTimer === null) this.pollTimer = window.setTimeout(() => { this.pollTimer = null; this.initialize(); }, 500);
         return;
       }
-      if (!this.vaultStore.isReady) {
+      if (status?.state !== 'ready') {
         this.loaded = false;
-        this.observedGeneration = this.vaultStore.status?.generation ?? null;
+        this.recoveryCode = this.vaultStore.recoveryCode = '';
+        this.observedGeneration = status?.generation ?? null;
         clearLocalSession();
+        clearDecryptedState();
         return;
       }
       const setupState = getSetupState();
       if (setupState === 'complete') this.setupComplete = true;
       else if (setupState === 'pending') this.setupComplete = false;
       else if (this.newVault) this.setupComplete = false;
-      else if (this.vaultStore.status?.has_vault) {
+      else if (status.has_vault) {
         this.setupComplete = true;
         setSetupState('complete');
       }
-      this.observedGeneration = this.vaultStore.status?.generation ?? null;
+      this.observedGeneration = status.generation;
       if (this.loaded) return;
       this.loaded = false;
       clearLocalSession();
       try {
         const settings = useSettingsStore();
         await settings.ensureLoaded();
+        if (this.showUpdates || current !== this.initialization) return;
         await useServerStore().getInfo();
-        const theme = settings.theme === 'auto' ? detectPreferredTheme() : settings.theme;
-        if (theme === 'dark' && !document.querySelector('link[data-peak-theme]')) {
-          const link = document.createElement('link');
-          link.href = '/dark.css';
-          link.rel = 'stylesheet';
-          link.setAttribute('data-peak-theme', 'dark');
-          document.head.appendChild(link);
-        }
+        if (this.showUpdates || current !== this.initialization) return;
+        applyTheme(settings.theme);
         this.loaded = true;
       } catch (_) {
+        if (this.showUpdates || current !== this.initialization) return;
         this.loadError = 'Open this view from PeakActivity desktop and make sure your vault is unlocked. Your local data has not been reset.';
       }
     },
     async checkVaultState() {
-      if (this.checkingVault) return;
+      if (this.showUpdates || this.checkingVault) return;
       this.checkingVault = true;
       try {
         const previousGeneration = this.observedGeneration;
         await this.vaultStore.refresh();
+        if (this.showUpdates) return;
         const status = this.vaultStore.status;
         if (!status || status.state === 'opening') return;
         if (status.state !== 'ready') {

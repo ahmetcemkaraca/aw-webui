@@ -1,3 +1,4 @@
+import defaultCategoryData from './defaultCategories.json';
 import _ from 'lodash';
 import { IEvent } from './interfaces';
 import { useSettingsStore } from '~/stores/settings';
@@ -30,14 +31,16 @@ export interface CategorySet {
 }
 
 /**
- * Merge multiple category sets in priority order (first set = highest priority).
+ * Merge category sets in priority order, optionally selected by ordered active IDs.
  * When the same category name appears in multiple sets, the first occurrence wins.
  * Within each set, the standard specificity rule applies (deeper category wins).
  */
-export function mergeCategorySets(sets: CategorySet[]): Category[] {
+export function mergeCategorySets(sets: CategorySet[], activeIds?: string[]): Category[] {
   const seen = new Set<string>();
   const merged: Category[] = [];
-  for (const set of sets) {
+  const orderedSets = activeIds ? activeIds.map(id => sets.find(set => set.id === id)) : sets;
+  for (const set of orderedSets) {
+    if (!set) continue;
     for (const cat of set.categories) {
       const key = JSON.stringify(cat.name);
       if (!seen.has(key)) {
@@ -49,80 +52,9 @@ export function mergeCategorySets(sets: CategorySet[]): Category[] {
   return merged;
 }
 
-const COLOR_UNCAT = '#CCC';
-
 // The default categories
 // Should be run through createMissingParents before being used in most cases.
-export const defaultCategories: Category[] = [
-  {
-    name: ['Work'],
-    rule: { type: 'regex', regex: 'Google Docs|libreoffice|ReText' },
-    data: { color: '#0F0', score: 10 },
-  },
-  {
-    name: ['Work', 'Programming'],
-    rule: {
-      type: 'regex',
-      regex: 'GitHub|Stack Overflow|BitBucket|Gitlab|vim|Spyder|kate|Ghidra|Scite',
-    },
-  },
-  {
-    name: ['Work', 'Programming', 'PeakActivity'],
-    rule: { type: 'regex', regex: 'PeakActivity|ActivityWatch|aw-', ignore_case: true },
-  },
-  { name: ['Work', 'Image'], rule: { type: 'regex', regex: 'GIMP|Inkscape' } },
-  { name: ['Work', 'Video'], rule: { type: 'regex', regex: 'Kdenlive' } },
-  { name: ['Work', 'Audio'], rule: { type: 'regex', regex: 'Audacity' } },
-  { name: ['Work', '3D'], rule: { type: 'regex', regex: 'Blender' } },
-  {
-    name: ['Media'],
-    rule: { type: 'none' },
-    data: { color: '#F33' },
-  },
-  {
-    name: ['Media', 'Games'],
-    rule: { type: 'regex', regex: 'Minecraft|RimWorld' },
-    data: { color: '#F80' },
-  },
-  {
-    name: ['Media', 'Video'],
-    rule: { type: 'regex', regex: 'YouTube|Plex|VLC' },
-    data: { color: '#F33' },
-  },
-  {
-    name: ['Media', 'Social Media'],
-    rule: {
-      type: 'regex',
-      regex: 'reddit|Facebook|Twitter|Instagram|devRant',
-      ignore_case: true,
-    },
-    data: { color: '#FCC400' },
-  },
-  {
-    name: ['Media', 'Music'],
-    rule: {
-      type: 'regex',
-      regex: 'Spotify|Deezer',
-      ignore_case: true,
-    },
-    data: { color: '#A8FC00' },
-  },
-  {
-    name: ['Comms'],
-    rule: { type: 'none' },
-    data: { color: '#9FF' },
-  },
-  {
-    name: ['Comms', 'IM'],
-    rule: {
-      type: 'regex',
-      regex:
-        'Messenger|Telegram|Signal|WhatsApp|Rambox|Slack|Riot|Element|Discord|Nheko|NeoChat|Mattermost',
-    },
-  },
-  { name: ['Comms', 'Email'], rule: { type: 'regex', regex: 'Gmail|Thunderbird|mutt|alpine' } },
-  { name: ['Uncategorized'], rule: { type: null }, data: { color: COLOR_UNCAT } },
-];
+export const defaultCategories: Category[] = defaultCategoryData as Category[];
 
 export function annotate(c: Category) {
   const ch = c.name;
@@ -223,9 +155,7 @@ export async function saveCategories(sets: CategorySet[], activeIds: string[]): 
   }
   const settingsStore = useSettingsStore();
   const cleanSets = sets.map(s => ({ ...s, categories: s.categories.map(cleanCategory) }));
-  const effectiveClasses = mergeCategorySets(sets.filter(s => activeIds.includes(s.id))).map(
-    cleanCategory
-  );
+  const effectiveClasses = mergeCategorySets(sets, activeIds).map(cleanCategory);
   await settingsStore.update({
     category_sets: cleanSets,
     active_set_ids: activeIds,

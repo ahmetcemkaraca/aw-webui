@@ -62,6 +62,7 @@ import 'vue-awesome/icons/undo';
 import { mapState } from 'pinia';
 import draggable from 'vuedraggable';
 
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { useViewsStore } from '~/stores/views';
 
 export default {
@@ -73,8 +74,12 @@ export default {
     view_id: { type: String, default: 'default' },
   },
   data() {
-    return { editing: false };
+    return { editing: false, unregisterPolicyDraft: null };
   },
+  mounted() {
+    this.unregisterPolicyDraft = registerPolicyDraft(['settings.views'], {blocked:()=>this.editing || useViewsStore().hasPolicyDraft});
+  },
+  beforeDestroy() { this.unregisterPolicyDraft?.(); },
   computed: {
     ...mapState(useViewsStore, ['views']),
     view: function () {

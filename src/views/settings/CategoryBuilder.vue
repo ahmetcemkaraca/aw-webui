@@ -104,7 +104,7 @@ div
                       @ok="createRuleOk()"
                       @hidden="createRuleCancel()")
 
-  b-modal(id="appendRule" title="Append rule" @ok="handleOk" :ok-disabled="!valid")
+  b-modal(id="appendRule" title="Append rule" @show="appendOpen = true" @hidden="appendOpen = false" @ok="handleOk" :ok-disabled="!valid")
     b-alert(variant="info" show)
       p.mb-1 Review: this rule currently matches {{ appendPreview.events }} uncategorized events ({{ Math.round(appendPreview.duration) }}s) in the selected host and date range.
       p.mb-1 Fields changed: category rule only. Stored event fields and previously downloaded reports remain unchanged.
@@ -132,6 +132,7 @@ div
 </style>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import _ from 'lodash';
 import moment from 'moment';
 import { mapState } from 'pinia';
@@ -161,6 +162,9 @@ export default {
   data() {
     return {
       loading: true,
+      appendOpen: false,
+      unregisterPolicyDraft: null,
+      disposed: false,
 
       categoryStore: useCategoryStore(),
       settingsStore: useSettingsStore(),
@@ -233,14 +237,20 @@ export default {
     },
   },
   async mounted() {
+    this.unregisterPolicyDraft = registerPolicyDraft(['settings.classes','settings.category_sets','settings.active_set_ids','settings.ignoredCategorySuggestions'], {
+      blocked: () => this.create.categoryId !== null || this.appendOpen || this.categoryStore.hasPolicyDraft,
+      reload: async owned => { if (await owned()) this.ignored_words = [...(this.settingsStore.ignoredCategorySuggestions || [])]; },
+    });
     // Make sure we don't have stale unsaved changes in categoryStore
     await useBucketsStore().ensureLoaded();
     await this.settingsStore.ensureLoaded();
+    if (this.disposed) return;
     this.ignored_words = [...(this.settingsStore.ignoredCategorySuggestions || [])];
     await this.categoryStore.load();
     // Called by watch
     //await this.fetchWords();
   },
+  beforeDestroy() { this.disposed = true; this.unregisterPolicyDraft?.(); },
   methods: {
     async fetchWords() {
       this.loading = true;

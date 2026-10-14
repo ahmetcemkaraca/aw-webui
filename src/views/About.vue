@@ -12,6 +12,7 @@ main
   p PeakActivity is not affiliated with or endorsed by ActivityWatch or its maintainers.
   p #[a(href="./LICENSE.txt" target="_blank" rel="noopener noreferrer") Read the Mozilla Public License 2.0]
   h2.h5 Current limitations
-  p Default encrypted storage, verified updates and production service connections are not yet available in this development preview.
+  p Default encrypted storage and production service connections are not yet available in this development preview.
+  p Experimental local release bundle verification is implemented. Production verification trust is not configured. Verified update delivery and installation remain unavailable.
   p A verified support or security reporting channel has not yet been configured. Do not share real activity or credentials in public reports.
 </template>

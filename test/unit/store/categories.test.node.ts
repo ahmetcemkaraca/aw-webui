@@ -3,7 +3,7 @@ import { setActivePinia, createPinia } from 'pinia';
 
 import { useCategoryStore } from '~/stores/categories';
 import { useSettingsStore } from '~/stores/settings';
-import { createMissingParents, defaultCategories, Category } from '~/util/classes';
+import { createMissingParents, defaultCategories, Category, CategorySet } from '~/util/classes';
 import { buildExactRulePattern } from '~/util/categorization';
 
 describe('categories store', () => {
@@ -201,5 +201,104 @@ describe('categories store', () => {
 
     expect(decoded).toEqual(42);
     expect(encoded).toEqual(42);
+  });
+});
+
+describe('category set priority', () => {
+  let categoryStore: ReturnType<typeof useCategoryStore>;
+  let settingsStore: ReturnType<typeof useSettingsStore>;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    categoryStore = useCategoryStore();
+    settingsStore = useSettingsStore();
+    const sets: CategorySet[] = [
+      {
+        id: 'first-stored',
+        categories: [{ name: ['Work'], rule: { type: 'regex', regex: '^First$' } }],
+      },
+      {
+        id: 'second-stored',
+        categories: [{ name: ['Work'], rule: { type: 'regex', regex: '^Second$' } }],
+      },
+      { id: 'inactive', categories: [{ name: ['Inactive'], rule: { type: 'none' } }] },
+    ];
+    settingsStore.$patch({
+      category_sets: sets,
+      active_set_ids: ['second-stored', 'first-stored'],
+    });
+  });
+
+  test('loads the first active set rule even when it is stored later', () => {
+    categoryStore.load();
+
+    expect(categoryStore.classes_for_query).toEqual([
+      [['Work'], { type: 'regex', regex: '^Second$' }],
+    ]);
+  });
+
+  test('reorders active sets without including inactive, unknown or duplicate sets', () => {
+    categoryStore.load();
+    categoryStore.setActiveSets(['first-stored', 'second-stored']);
+    expect(categoryStore.classes_for_query).toEqual([
+      [['Work'], { type: 'regex', regex: '^First$' }],
+    ]);
+
+    categoryStore.setActiveSets(['second-stored', 'missing', 'first-stored', 'second-stored']);
+    expect(categoryStore.classes_for_query).toEqual([
+      [['Work'], { type: 'regex', regex: '^Second$' }],
+    ]);
+    expect(categoryStore.classes_clean).toHaveLength(1);
+  });
+
+  test('persists the same active priority in the legacy classes mirror', async () => {
+    categoryStore.load();
+    const update = jest.spyOn(settingsStore, 'update').mockResolvedValue(undefined);
+    const previousEnvironment = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await categoryStore.save();
+      expect(update).toHaveBeenCalledWith({
+        category_sets: settingsStore.category_sets,
+        active_set_ids: ['second-stored', 'first-stored'],
+        classes: [{ name: ['Work'], rule: { type: 'regex', regex: '^Second$' } }],
+      });
+    } finally {
+      if (previousEnvironment === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnvironment;
+      update.mockRestore();
+    }
+  });
+});
+
+describe('shared native report defaults retain free activation semantics', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  test('an explicit empty legacy list stays empty and absent legacy uses shipped defaults', () => {
+    const settings = useSettingsStore();
+    const categories = useCategoryStore();
+    settings.category_sets = [];
+    settings.classes = [];
+    categories.load();
+    expect(categories.classes).toEqual([]);
+    expect(categories.category_sets).toEqual([{ id: 'default', categories: [] }]);
+    settings.classes = null;
+    categories.load();
+    expect(categories.category_sets[0].categories).toEqual(defaultCategories);
+    expect(categories.active_set_ids).toEqual(['default']);
+  });
+
+  test('empty activation selects the existing first set and unknown activation stays empty', () => {
+    const settings = useSettingsStore();
+    const categories = useCategoryStore();
+    settings.category_sets = [{ id: 'Łódź Work', categories: [{ name: ['Prior'], rule: { type: 'none' } }] }];
+    settings.active_set_ids = [];
+    categories.load();
+    expect(categories.active_set_ids).toEqual(['Łódź Work']);
+    expect(categories.classes.map(c => c.name)).toEqual([['Prior']]);
+    settings.active_set_ids = ['unknown'];
+    categories.load();
+    expect(categories.active_set_ids).toEqual(['unknown']);
+    expect(categories.classes).toEqual([]);
   });
 });

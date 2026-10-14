@@ -45,6 +45,7 @@ section(:class="compact ? 'container py-2 border-bottom' : ''" aria-label="Recor
 </template>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { useCaptureStore } from '~/stores/capture';
 
 export default {
@@ -54,7 +55,7 @@ export default {
     allowStart: { type: Boolean, default: true },
   },
   data() {
-    return { capture: useCaptureStore(), draft: null, apps: '', domains: '', pauseUntil: '', saved: false, timer: null };
+    return { capture: useCaptureStore(), draft: null, apps: '', domains: '', pauseUntil: '', saved: false, timer: null, savedControls: '', initializing: true, disposed: false, unregisterPolicyDraft: null };
   },
   computed: {
     fieldSummary(): string {
@@ -72,12 +73,26 @@ export default {
     'capture.policy'(value) { if (value && !this.draft) this.reset(); },
   },
   async mounted() {
+    this.unregisterPolicyDraft = registerPolicyDraft(['capture.minimization'], {
+      blocked: () => this.initializing || this.capture.busy || this.capture.pausing || (!this.compact && this.draft && this.controlSnapshot() !== this.savedControls),
+      reload: async owned => {
+        if (!await owned()) return;
+        if (!await this.capture.reloadPolicy(owned)) {
+          if (await owned()) throw new Error('Capture controls could not be reloaded.');
+          return;
+        }
+        if (!this.disposed) this.reset();
+      },
+    });
     await this.capture.load();
+    if (this.disposed) return;
     this.reset();
+    this.initializing = false;
     if (this.compact) this.timer = setInterval(() => this.capture.load(), 1000);
   },
-  beforeDestroy() { if (this.timer) clearInterval(this.timer); },
+  beforeDestroy() { this.disposed = true; this.unregisterPolicyDraft?.(); if (this.timer) clearInterval(this.timer); },
   methods: {
+    controlSnapshot() { return JSON.stringify({ fields:['window','idle','browser','titles','urls','paths'].map(key => this.draft?.[key]), apps:this.apps,domains:this.domains,pauseUntil:this.pauseUntil }); },
     preset(name: string) {
       const values = name === 'passwords' ? ['1password', 'bitwarden', 'keepass', 'keychain', 'credential', 'password']
         : ['bank', 'health', 'medical', 'clinic', 'patient'];
@@ -102,6 +117,7 @@ export default {
         const date = new Date(this.draft.paused_until);
         this.pauseUntil = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       }
+      this.savedControls = this.controlSnapshot();
     },
     async start() {
       if (this.capture.runtime.private_mode || this.capture.policy.paused_until) {

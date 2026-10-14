@@ -49,13 +49,13 @@ section(aria-labelledby="privacy-firewall-title")
         li(v-for="field in preview.decision.removed_fields" :key="field") Removed field: {{ field }}
       pre(v-if="preview.decision.sanitized_payload") {{ JSON.stringify(preview.decision.sanitized_payload, null, 2) }}
       label.d-block.mt-2(for="egress-existing-approval") Existing approval
-      select#egress-existing-approval.form-control(v-model="selectedApprovalId")
+      select#egress-existing-approval.form-control(v-model="selectedApprovalId" @change="approvalSelectionRevision++")
         option(value="") Create a new approval
         option(v-for="approval in reusableApprovals" :key="approval.approval_id" :value="approval.approval_id") {{ approval.scope }} — {{ approval.expires_at || 'until revoked' }}
       p.small.text-muted(v-if="selectedApprovalId") Saved approvals only apply to the exact same sanitized payload; the server checks it before sending.
       template(v-else)
         label.d-block.mt-2(for="egress-approval-scope") Approval scope
-        select#egress-approval-scope.form-control(v-model="approvalScope")
+        select#egress-approval-scope.form-control(v-model="approvalScope" @change="approvalSelectionRevision++")
           option(value="once") This request only
           option(value="time_limited") This exact payload for one hour
           option(value="destination_specific") This exact payload for this destination
@@ -143,6 +143,7 @@ section(aria-labelledby="privacy-firewall-title")
 </template>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { getClient } from '~/util/awclient';
 import experience from '~/generated/product-experience.json';
 import { statusLabel } from '~/product/experience';
@@ -183,8 +184,13 @@ export default {
       signedPolicyJson: '',
       signedPolicyPreview: null,
       loading: false,
+      unregisterPolicyDraft: null,
       busy: false,
       error: '',
+      requestGeneration: 0,
+      reviewRevision: 0,
+      approvalSelectionRevision: 0,
+      disposed: false,
       days: [
         { value: 1, label: 'Mon' },
         { value: 2, label: 'Tue' },
@@ -329,70 +335,112 @@ export default {
   },
   watch: {
     candidatePayload() {
-      this.preview = null;
-      this.selectedApprovalId = '';
+      this.invalidateReviews();
     },
     destinationId() {
-      this.preview = null;
-      this.selectedApprovalId = '';
+      this.invalidateReviews();
     },
     purposeId() {
-      this.preview = null;
-      this.selectedApprovalId = '';
+      this.invalidateReviews();
     },
     userPolicy: {
       deep: true,
       handler() {
-        this.policyPreview = null;
-        this.preview = null;
-        this.selectedApprovalId = '';
+        this.invalidateReviews();
       },
     },
     signedPolicyJson() {
-      this.signedPolicyPreview = null;
+      this.invalidateReviews();
     },
   },
   mounted() {
+    this.unregisterPolicyDraft = registerPolicyDraft(['egress.user_policy','egress.signed_bundle'], {
+      blocked: () => this.hasPolicyChanges || !!this.signedPolicyJson.trim() || this.busy || this.loading,
+      reload: async owned => { if (await owned() && !await this.refresh(owned)) throw new Error('Firewall policy could not be refreshed.'); },
+    });
     this.refresh();
   },
+  beforeDestroy() {
+    this.unregisterPolicyDraft?.();
+    this.disposed = true;
+    this.invalidateReviews();
+    this.candidatePayload = '{}';
+    this.signedPolicyJson = '';
+    this.userPolicy = emptyPolicy();
+    this.savedPolicy = emptyPolicy();
+    this.status = this.policy = null;
+    this.receipts = this.approvals = [];
+    this.destinationId = this.purposeId = this.error = '';
+    this.busy = this.loading = false;
+  },
   methods: {
-    async refresh() {
-      this.loading = true;
+    invalidateReviews() {
+      this.reviewRevision++;
+      this.preview = this.policyPreview = this.signedPolicyPreview = null;
+      this.selectedApprovalId = '';
+    },
+    beginRequest() {
+      if (this.disposed) return null;
       this.error = '';
+      this.busy = this.loading = false;
+      return { generation: ++this.requestGeneration, revision: this.reviewRevision };
+    },
+    isCurrent(request) {
+      return !this.disposed && request.generation === this.requestGeneration &&
+        request.revision === this.reviewRevision;
+    },
+    finishRequest(request) {
+      if (!this.disposed && request.generation === this.requestGeneration)
+        this.busy = this.loading = false;
+    },
+    async refresh(owned?: () => Promise<boolean>) {
+      const guard = typeof owned === 'function' ? owned : null;
+      this.invalidateReviews();
+      const request = this.beginRequest();
+      if (!request) return false;
+      this.loading = !guard;
       try {
         const client = getClient().req;
         const [statusResponse, receipts, userPolicy, approvals] = await Promise.all([
-          client.get('/api/0/egress/status'),
-          client.get('/api/0/egress/receipts'),
-          client.get('/api/0/egress/user-policy'),
-          client.get('/api/0/egress/approvals'),
+          client.get('/0/egress/status'),
+          client.get('/0/egress/receipts'),
+          client.get('/0/egress/user-policy'),
+          client.get('/0/egress/approvals'),
         ]);
+        if (!this.isCurrent(request) || (guard && !await guard()) || !this.isCurrent(request)) return false;
+        let policy = null;
+        if (statusResponse.data.policy_bundle_stored && statusResponse.data.trusted_policy_keys) {
+          const response = await client.get('/0/egress/policy');
+          if (!this.isCurrent(request) || (guard && !await guard()) || !this.isCurrent(request)) return false;
+          policy = response.data;
+        }
         this.status = statusResponse.data;
         this.receipts = receipts.data;
         this.approvals = approvals.data;
         this.selectedApprovalId = '';
         this.userPolicy = copy(userPolicy.data);
         this.savedPolicy = copy(userPolicy.data);
-        this.preview = null;
-        this.policy = null;
-        if (statusResponse.data.policy_bundle_stored && statusResponse.data.trusted_policy_keys) {
-          const { data: policy } = await client.get('/api/0/egress/policy');
-          this.policy = policy;
+        this.policy = policy;
+        if (policy) {
           this.destinationId = this.destinations[0]?.id || '';
           this.selectPurpose();
         } else {
           this.destinationId = '';
           this.purposeId = '';
         }
+        return true;
       } catch (_) {
+        if (!this.isCurrent(request) || (guard && !await guard()) || !this.isCurrent(request)) return false;
         this.error =
           'Privacy Firewall status could not be loaded. Outbound requests remain blocked.';
+        return false;
       } finally {
-        this.loading = false;
+        this.finishRequest(request);
       }
     },
     async previewSignedPolicy() {
-      this.error = '';
+      const request = this.beginRequest();
+      if (!request) return;
       this.signedPolicyPreview = null;
       let bundle;
       try {
@@ -407,31 +455,37 @@ export default {
       }
       this.busy = true;
       try {
-        const { data: diff } = await getClient().req.post('/api/0/egress/policy/diff', bundle);
+        const { data: diff } = await getClient().req.post('/0/egress/policy/diff', bundle);
+        if (!this.isCurrent(request)) return;
         this.signedPolicyPreview = { bundle, diff };
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error = 'Signed policy could not be verified. No policy was changed.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     async acceptSignedPolicy() {
       if (!this.signedPolicyPreview) return;
+      const reviewed = this.signedPolicyPreview;
+      const payload = copy({ accept: true, bundle: reviewed.bundle, expected_diff: reviewed.diff });
+      const request = this.beginRequest();
+      if (!request) return;
       this.busy = true;
-      this.error = '';
       try {
-        await getClient().req.put('/api/0/egress/policy/accept', {
-          accept: true,
-          bundle: this.signedPolicyPreview.bundle,
-          expected_diff: this.signedPolicyPreview.diff,
-        });
+        await getClient().req.put('/0/egress/policy/accept', payload);
+        if (!this.isCurrent(request) || this.signedPolicyPreview !== reviewed) return;
         this.signedPolicyJson = '';
         this.signedPolicyPreview = null;
+        await this.$nextTick();
+        if (this.disposed || request.generation !== this.requestGeneration || this.signedPolicyJson)
+          return;
         await this.refresh();
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error = 'Signed policy was not accepted. Review the current diff and try again.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     selectPurpose() {
@@ -439,7 +493,8 @@ export default {
       this.purposeId = this.purposes[0]?.id || '';
     },
     async previewCandidate() {
-      this.error = '';
+      const request = this.beginRequest();
+      if (!request) return;
       this.preview = null;
       let payload;
       try {
@@ -456,18 +511,20 @@ export default {
       if (!purpose) return;
       this.busy = true;
       try {
-        const { data } = await getClient().req.post('/api/0/egress/preview', {
+        const { data } = await getClient().req.post('/0/egress/preview', {
           schema_version: 1,
           destination_id: this.destinationId,
           purpose_id: purpose.id,
           retention_id: purpose.retention_id,
           payload,
         });
+        if (!this.isCurrent(request)) return;
         this.preview = data;
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error = 'The request could not be previewed. Outbound requests remain blocked.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     async sendPreview() {
@@ -477,58 +534,76 @@ export default {
         !this.status?.outbound_enabled
       )
         return;
+      const reviewed = this.preview;
+      const previewId = reviewed.decision.preview_id;
+      const scope = this.approvalScope;
+      const selectedApprovalId = this.selectedApprovalId;
+      const selectionRevision = this.approvalSelectionRevision;
+      const request = this.beginRequest();
+      if (!request) return;
+      const current = () => this.isCurrent(request) && this.preview === reviewed &&
+        this.approvalSelectionRevision === selectionRevision &&
+        this.approvalScope === scope && this.selectedApprovalId === selectedApprovalId;
       this.busy = true;
-      this.error = '';
       try {
-        let approvalId = this.selectedApprovalId;
+        let approvalId = selectedApprovalId;
         if (!approvalId) {
           const expiresAt =
-            this.approvalScope === 'destination_specific'
+            scope === 'destination_specific'
               ? null
               : new Date(
-                  Date.now() + (this.approvalScope === 'once' ? 5 : 60) * 60 * 1000
+                  Date.now() + (scope === 'once' ? 5 : 60) * 60 * 1000
                 ).toISOString();
-          const { data } = await getClient().req.post('/api/0/egress/approve', {
-            preview_id: this.preview.decision.preview_id,
-            scope: this.approvalScope,
+          const { data } = await getClient().req.post('/0/egress/approve', {
+            preview_id: previewId,
+            scope,
             expires_at: expiresAt,
           });
           approvalId = data.approval_id;
         }
-        await getClient().req.post('/api/0/egress/send', {
-          preview_id: this.preview.decision.preview_id,
+        if (!current()) return;
+        await getClient().req.post('/0/egress/send', {
+          preview_id: previewId,
           approval_id: approvalId,
         });
+        if (!current()) return;
         this.selectedApprovalId = '';
         this.preview = null;
         await this.refresh();
       } catch (_) {
+        if (!current()) return;
         this.preview = null;
         this.selectedApprovalId = '';
         try {
-          const { data } = await getClient().req.get('/api/0/egress/approvals');
+          const { data } = await getClient().req.get('/0/egress/approvals');
+          if (!this.isCurrent(request)) return;
           this.approvals = data;
         } catch {
+          if (!this.isCurrent(request)) return;
           this.approvals = [];
         }
         this.error =
           'The approved request was not sent. Review the latest policy and preview again.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     async revokeApprovals() {
       if (!this.approvals.length) return;
+      this.invalidateReviews();
+      const request = this.beginRequest();
+      if (!request) return;
       this.busy = true;
-      this.error = '';
       try {
-        await getClient().req.delete('/api/0/egress/approvals');
+        await getClient().req.delete('/0/egress/approvals');
+        if (!this.isCurrent(request)) return;
         this.selectedApprovalId = '';
         await this.refresh();
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error = 'Active outbound approvals could not be revoked.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     addRule() {
@@ -553,52 +628,66 @@ export default {
       return same(before, after);
     },
     async previewUserPolicy() {
+      const request = this.beginRequest();
+      if (!request) return;
+      const draft = copy(this.userPolicy);
       this.busy = true;
-      this.error = '';
       this.policyPreview = null;
       try {
         const { data } = await getClient().req.post(
-          '/api/0/egress/user-policy/diff',
-          this.userPolicy
+          '/0/egress/user-policy/diff',
+          draft
         );
+        if (!this.isCurrent(request)) return;
         this.policyPreview = data;
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error =
           'Local privacy changes could not be reviewed. Check the rule values and try again.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     async acceptUserPolicy() {
       if (!this.policyPreview) return;
+      const reviewed = this.policyPreview;
+      const previewId = reviewed.preview_id;
+      const request = this.beginRequest();
+      if (!request) return;
       this.busy = true;
-      this.error = '';
       try {
-        await getClient().req.put('/api/0/egress/user-policy/accept', {
-          preview_id: this.policyPreview.preview_id,
+        await getClient().req.put('/0/egress/user-policy/accept', {
+          preview_id: previewId,
         });
+        if (!this.isCurrent(request) || this.policyPreview !== reviewed) return;
         this.policyPreview = null;
         await this.refresh();
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error =
           'Local privacy changes were not saved. Review the latest policy and try again.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
     async toggleKillSwitch() {
       if (!this.status) return;
+      const enabled = !this.status.kill_switch_enabled;
+      this.invalidateReviews();
+      const request = this.beginRequest();
+      if (!request) return;
       this.busy = true;
-      this.error = '';
       try {
-        await getClient().req.post('/api/0/egress/kill-switch', {
-          enabled: !this.status.kill_switch_enabled,
+        await getClient().req.post('/0/egress/kill-switch', {
+          enabled,
         });
+        if (!this.isCurrent(request)) return;
         await this.refresh();
       } catch (_) {
+        if (!this.isCurrent(request)) return;
         this.error = 'The outbound kill switch could not be changed.';
       } finally {
-        this.busy = false;
+        this.finishRequest(request);
       }
     },
   },

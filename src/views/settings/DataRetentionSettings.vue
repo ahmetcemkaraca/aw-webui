@@ -2,7 +2,7 @@
 div
   h5 Raw event retention
   b-form-group(label="Automatically delete older local events")
-    b-form-select(v-model.number="selectedDays" :options="options" :disabled="saving" @change="saveRetention")
+    b-form-select(v-model.number="selectedDays" :options="displayOptions" :disabled="saving" @change="saveRetention")
   small.d-block.text-muted Cleanup runs within a minute after a policy change, then daily while PeakActivity is open. If it is closed, cleanup runs after the next launch.
   small.text-muted
     | Correction metadata for deleted events is removed with them. Report totals are calculated from retained events; no separate aggregate dataset is kept.
@@ -20,6 +20,7 @@ div
 </template>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { useSettingsStore } from '~/stores/settings';
 
 async function nativeInvoke(command: string, args?: object): Promise<unknown> {
@@ -36,6 +37,8 @@ export default {
     return {
       settingsStore: useSettingsStore(),
       selectedDays: 0,
+      savedDays: 0,
+      unregisterPolicyDraft: null,
       saving: false,
       error: '',
       supportPreview: null as { id: string; content: string } | null,
@@ -51,13 +54,22 @@ export default {
       ],
     };
   },
-  async mounted() {
-    await this.settingsStore.ensureLoaded();
-    this.selectedDays = this.settingsStore.rawRetentionDays || 0;
+  computed: {
+    displayOptions() { return this.options.some(option => option.value === this.selectedDays) ? this.options : [...this.options,{value:this.selectedDays,text:`${this.selectedDays} days`}]; },
   },
+  async mounted() {
+    this.unregisterPolicyDraft = registerPolicyDraft(['settings.rawRetentionDays'], {
+      blocked: () => this.saving || this.selectedDays !== this.savedDays,
+      reload: async owned => { if (await owned()) this.selectedDays = this.savedDays = this.settingsStore.rawRetentionDays ?? 0; },
+    });
+    await this.settingsStore.ensureLoaded();
+    this.selectedDays = this.savedDays = this.settingsStore.rawRetentionDays ?? 0;
+  },
+  beforeDestroy() { this.unregisterPolicyDraft?.(); },
   watch: {
     'settingsStore.rawRetentionDays'(value) {
-      if (!this.saving) this.selectedDays = value || 0;
+      if (!this.saving && this.selectedDays === this.savedDays) this.selectedDays = value ?? 0;
+      if (!this.saving) this.savedDays = value ?? 0;
     },
   },
   methods: {
@@ -67,6 +79,7 @@ export default {
       this.error = '';
       try {
         await this.settingsStore.update({ rawRetentionDays: value });
+        this.savedDays = value;
       } catch (error) {
         this.settingsStore.$patch({ rawRetentionDays: previous });
         this.selectedDays = previous;

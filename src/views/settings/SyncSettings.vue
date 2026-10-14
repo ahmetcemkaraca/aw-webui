@@ -6,6 +6,8 @@ div.sync-settings
 
   b-alert(v-if="store.error" variant="danger" show) {{ store.error }}
 
+  SyncPolicyReview(:active="active")
+
   section.mb-4
     h5 Network sync
     p(v-if="store.syncPreparing") The encrypted local baseline is {{ store.baselineProgress?.baseline_cursor || 0 }} / {{ store.baselineProgress?.baseline_max_event_id || 0 }} events complete. No relay requests are made until this step finishes.
@@ -131,14 +133,7 @@ div.sync-settings
   section.mb-4
     h5 Offline recovery
     p.text-muted The recovery kit protects sync keys. Pair it with an encrypted activity snapshot to restore history on a clean device.
-    b-button.mb-2(variant="outline-secondary" :disabled="store.busy" @click="store.exportSnapshot()") Export encrypted activity snapshot
-    h6.mt-3 Encrypted backup versions
-    ul(v-if="store.backupVersions.length")
-      li(v-for="version in store.backupVersions" :key="version.snapshot_id")
-        | Snapshot {{ version.snapshot_id }} · schema {{ version.schema_version }} · epoch {{ version.key_epoch }} · {{ version.object_count }} ciphertext objects
-    p.small.text-muted(v-else) Only the current local encrypted snapshot is stored here; older or hosted versions require a configured relay.
-    b-form-group(label="Encrypted activity snapshot JSON" v-if="store.snapshotExport")
-      b-form-textarea(:value="store.snapshotExport" rows="6" readonly)
+    SyncBackupCatalogue(:active="active")
     p(v-if="store.recoveryConfirmed") A recovery phrase has been confirmed for this vault.
     p(v-else) No recovery phrase has been confirmed.
     b-button(
@@ -179,6 +174,8 @@ div.sync-settings
     section.mt-3(v-if="store.restorePreview" aria-label="Encrypted restore preview")
       h6 Restore preview — encrypted data only
       p No activity event contents are shown. Restore will write only after you accept this preview.
+      p(v-if="store.restorePreview.policy_continuity_present") {{ store.restorePreview.policy_conflict_count }} settings or policy fields need local review. Current settings stay active until you explicitly accept each change.
+      p.text-warning(v-else) Portable active settings are absent from this legacy snapshot. Its stored operation history is retained.
       dl
         dt Device ID
         dd.font-monospace {{ store.restorePreview.device_id || 'Not available in this local vault' }}
@@ -205,14 +202,20 @@ div.sync-settings
 
 <script lang="ts">
 import { useSyncStore } from '~/stores/sync';
+import { useBackupStore } from '~/stores/backups';
+import SyncPolicyReview from '~/components/SyncPolicyReview.vue';
+import SyncBackupCatalogue from '~/components/SyncBackupCatalogue.vue';
 import experience from '~/generated/product-experience.json';
 import { capability } from '~/product/experience';
 
 export default {
   name: 'SyncSettings',
+  components: { SyncPolicyReview, SyncBackupCatalogue },
+  props: { active: { type: Boolean, default: true } },
   data() {
     return {
       store: useSyncStore(),
+      backups: useBackupStore(),
       recipientIdentity: '',
       invitationInput: '',
       responseInput: '',
@@ -241,6 +244,18 @@ export default {
       if (!this.store.devices.some(device => !device.is_current_device && !device.revoked_at && !device.needs_repair))
         return 'Pair and verify another current-epoch device first.';
       return '';
+    },
+  },
+  watch: {
+    'backups.restored'(value: boolean) {
+      if (!value) return;
+      this.store.clearSensitive();
+      this.store.recoveryConfirmed = false;
+      this.store.recoveryRestored = true;
+      this.recoverySaved = false;
+      this.recoveryKitInput = this.snapshotInput = '';
+      void this.store.refresh();
+      void this.store.refreshSyncControl();
     },
   },
   created() {
@@ -288,8 +303,7 @@ export default {
       );
     },
     clearRestorePreview() {
-      this.store.restorePreview = null;
-      this.store.restoreAccepted = false;
+      this.store.invalidateRestorePreview();
     },
     async rotateKeys() {
       if (

@@ -19,7 +19,7 @@ div
         section.settings-section(v-show="activeGroup === group.id" :key="group.id")
           h4.settings-section__title {{ group.label }}
           p.text-muted.small.mb-3(v-if="group.help") {{ group.help }}
-          component(v-for="comp in group.components" :key="comp.name" :is="comp.name")
+          component(v-for="comp in group.components" :key="comp.name" :is="comp.name" v-bind="['NotificationSettings', 'UpdateSettings', 'SyncSettings'].includes(comp.name) ? { active: activeGroup === group.id } : {}")
 </template>
 
 <script lang="ts">
@@ -42,6 +42,8 @@ import DataRetentionSettings from '~/views/settings/DataRetentionSettings.vue';
 import AISettings from '~/views/settings/AISettings.vue';
 import SyncSettings from '~/views/settings/SyncSettings.vue';
 import PluginSettings from '~/views/settings/PluginSettings.vue';
+import NotificationSettings from '~/views/settings/NotificationSettings.vue';
+import UpdateSettings from '~/views/settings/UpdateSettings.vue';
 import experience from '~/generated/product-experience.json';
 import { capability } from '~/product/experience';
 
@@ -70,6 +72,8 @@ export default {
     SyncSettings,
     AISettings,
     PluginSettings,
+    NotificationSettings,
+    UpdateSettings,
     CaptureControls,
   },
   beforeRouteLeave(to, from, next) {
@@ -162,8 +166,20 @@ export default {
         label: 'Developer',
         components: [{ name: 'DeveloperSettings' }],
       };
+      const notifications: Group = {
+        id: 'notifications',
+        label: 'Notifications',
+        help: 'Review and clear recent local desktop notices. OS delivery and permission remain unverified.',
+        components: [{ name: 'NotificationSettings' }],
+      };
+      const updates: Group = {
+        id: 'updates',
+        label: 'Updates',
+        help: 'Verify a local release bundle. Delivery, installation and release approval remain unavailable.',
+        components: [{ name: 'UpdateSettings' }],
+      };
 
-      const groups: Group[] = [general, appearance, categorization, privacy, ai, data, sync, plugins, developer];
+      const groups: Group[] = [general, appearance, categorization, privacy, notifications, updates, ai, data, sync, plugins, developer];
       return groups;
     },
   },

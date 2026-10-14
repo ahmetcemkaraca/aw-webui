@@ -204,7 +204,7 @@ describe('Privacy Firewall controls', () => {
       wrapper.find('section[aria-labelledby="egress-preview-result-title"]').text()
     ).not.toContain('local-only');
     expect(wrapper.find('[aria-label="Approve and send exact preview"]').exists()).toBe(true);
-    expect(request.post).not.toHaveBeenCalledWith('/api/0/egress/send', expect.anything());
+    expect(request.post).not.toHaveBeenCalledWith('/0/egress/send', expect.anything());
 
     await wrapper.find('[aria-label="Candidate request payload"]').setValue('{"app":"Editor"}');
     expect(wrapper.find('[aria-label="Approve and send exact preview"]').exists()).toBe(false);
@@ -220,14 +220,14 @@ describe('Privacy Firewall controls', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     await wrapper.find('[aria-label="Approve and send exact preview"]').trigger('click');
     expect(request.post).toHaveBeenCalledWith(
-      '/api/0/egress/approve',
+      '/0/egress/approve',
       expect.objectContaining({
         preview_id: 'payload-preview-1',
         scope: 'once',
         expires_at: expect.any(String),
       })
     );
-    expect(request.post).toHaveBeenCalledWith('/api/0/egress/send', {
+    expect(request.post).toHaveBeenCalledWith('/0/egress/send', {
       preview_id: 'payload-preview-1',
       approval_id: 'approval-1',
     });
@@ -290,8 +290,8 @@ describe('Privacy Firewall controls', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     await wrapper.find('#egress-existing-approval').setValue('saved-approval');
     await wrapper.find('[aria-label="Send with existing approval"]').trigger('click');
-    expect(request.post).not.toHaveBeenCalledWith('/api/0/egress/approve', expect.anything());
-    expect(request.post).toHaveBeenCalledWith('/api/0/egress/send', {
+    expect(request.post).not.toHaveBeenCalledWith('/0/egress/approve', expect.anything());
+    expect(request.post).toHaveBeenCalledWith('/0/egress/send', {
       preview_id: 'payload-preview-1',
       approval_id: 'saved-approval',
     });
@@ -302,7 +302,7 @@ describe('Privacy Firewall controls', () => {
     const wrapper = shallowMount(PrivacyFirewall);
     await wrapper.vm.refresh();
     await wrapper.vm.toggleKillSwitch();
-    expect(request.post).toHaveBeenCalledWith('/api/0/egress/kill-switch', { enabled: false });
+    expect(request.post).toHaveBeenCalledWith('/0/egress/kill-switch', { enabled: false });
     expect(wrapper.vm.status.kill_switch_enabled).toBe(false);
     wrapper.destroy();
   });
@@ -358,7 +358,7 @@ describe('Privacy Firewall controls', () => {
     expect(wrapper.text()).toContain('sync-relay / sync');
     expect(wrapper.text()).toContain('time_limited');
     await wrapper.find('[aria-label="Revoke all approvals"]').trigger('click');
-    expect(request.delete).toHaveBeenCalledWith('/api/0/egress/approvals');
+    expect(request.delete).toHaveBeenCalledWith('/0/egress/approvals');
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(wrapper.text()).toContain('No active outbound approvals');
     wrapper.destroy();
@@ -396,7 +396,7 @@ describe('Privacy Firewall controls', () => {
     await wrapper.find('[aria-label="Preview signed policy changes"]').trigger('click');
     await new Promise(resolve => setTimeout(resolve, 0));
     await wrapper.find('[aria-label="Accept signed policy changes"]').trigger('click');
-    expect(request.put).toHaveBeenCalledWith('/api/0/egress/policy/accept', {
+    expect(request.put).toHaveBeenCalledWith('/0/egress/policy/accept', {
       accept: true,
       bundle,
       expected_diff: expect.objectContaining({ to_version: 4 }),
@@ -411,7 +411,7 @@ describe('Privacy Firewall controls', () => {
     expect(wrapper.text()).toContain('Added 1 rule');
     await wrapper.find('[aria-label="Preview local policy diff"]').trigger('click');
     expect(request.post).toHaveBeenCalledWith(
-      '/api/0/egress/user-policy/diff',
+      '/0/egress/user-policy/diff',
       expect.objectContaining({
         schema_version: 1,
         user_rules: [{ pattern: { kind: 'application', value: 'password' }, action: 'deny' }],
@@ -425,7 +425,7 @@ describe('Privacy Firewall controls', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(wrapper.text()).toContain('Added application match “passcode”');
     await wrapper.find('[aria-label="Accept local policy changes"]').trigger('click');
-    expect(request.put).toHaveBeenCalledWith('/api/0/egress/user-policy/accept', {
+    expect(request.put).toHaveBeenCalledWith('/0/egress/user-policy/accept', {
       preview_id: 'local-diff-1',
     });
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -443,7 +443,7 @@ describe('Privacy Firewall controls', () => {
     await wrapper.find('[aria-label="Preview local policy diff"]').trigger('click');
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(request.post).toHaveBeenCalledWith(
-      '/api/0/egress/user-policy/diff',
+      '/0/egress/user-policy/diff',
       expect.objectContaining({
         safe_zone_patterns: [{ kind: 'application', value: 'personal' }],
         after_hours: { weekdays: [1, 2, 3, 4, 5], start_minute: 1170, end_minute: 480 },
@@ -452,5 +452,282 @@ describe('Privacy Firewall controls', () => {
     await wrapper.find('[aria-label="Accept local policy changes"]').trigger('click');
     await new Promise(resolve => setTimeout(resolve, 0));
     wrapper.destroy();
+  });
+
+
+  describe('pending reviewed requests', () => {
+    const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+    const deferred = () => {
+      let resolve, reject;
+      const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+      return { promise, resolve, reject };
+    };
+    const flows = [
+      ['candidate', '/0/egress/preview', 'Preview sanitized request', 'egress-preview-result-title'],
+      ['local policy', '/0/egress/user-policy/diff', 'Preview local policy diff', 'local-policy-diff-title'],
+      ['signed policy', '/0/egress/policy/diff', 'Preview signed policy changes', 'signed-policy-diff-title'],
+    ];
+
+    async function configuredWrapper() {
+      firewallStatus = {
+        ...firewallStatus, kill_switch_enabled: false, policy_bundle_stored: true,
+        trusted_policy_keys: 1, outbound_enabled: true,
+      };
+      registry = {
+        schema_version: 1, version: 3, hard_deny_version: 1,
+        destinations: [{ id: 'sync-relay', status: 'available', https_origin: 'https://relay.example.test', allowed_purposes: ['sync'] }],
+        purposes: [{ id: 'sync', destination_id: 'sync-relay', endpoint_path: '/sync', retention_id: 'ephemeral', retention_disclosure: 'Request is not retained.', allowed_fields: ['/app'] }],
+        organization_rules: [], user_rules: [], safe_zone_patterns: [], after_hours: null,
+      };
+      const wrapper = shallowMount(PrivacyFirewall);
+      await wrapper.vm.refresh();
+      await settle();
+      request.get.mockClear();
+      request.post.mockClear();
+      request.put.mockClear();
+      return wrapper;
+    }
+
+    async function editFlow(wrapper, kind, newer = false) {
+      if (kind === 'candidate') {
+        await wrapper.find('[aria-label="Candidate request payload"]').setValue(
+          newer ? '{"app":"Editor"}' : '{"app":"Browser"}'
+        );
+      } else if (kind === 'local policy') {
+        if (!newer) await wrapper.find('[aria-label="Add password-manager rules preset"]').trigger('click');
+        else await wrapper.find('[aria-label="Rule match 1"]').setValue('passcode');
+      } else {
+        await wrapper.find('[aria-label="Signed policy bundle JSON"]').setValue(
+          JSON.stringify({ schema_version: 1, signer_key_id: 'release', signature: newer ? 'changed' : 'synthetic', bundle: { version: newer ? 5 : 4 } })
+        );
+      }
+    }
+
+    function delayPost(endpoint) {
+      const pending = deferred();
+      const original = request.post.getMockImplementation();
+      let response;
+      request.post.mockImplementation((url, body) => {
+        if (url !== endpoint) return original(url, body);
+        response = original(url, JSON.parse(JSON.stringify(body)));
+        return pending.promise;
+      });
+      return { ...pending, response: () => response };
+    }
+
+    test.each(flows)('%s edits invalidate a result that is still pending', async (kind, endpoint, action, title) => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, kind);
+      const pending = delayPost(endpoint);
+      await wrapper.find(`[aria-label="${action}"]`).trigger('click');
+      await editFlow(wrapper, kind, true);
+      pending.resolve(await pending.response());
+      await settle();
+      expect(wrapper.find(`section[aria-labelledby="${title}"]`).exists()).toBe(false);
+      expect(wrapper.vm.busy).toBe(false);
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      wrapper.destroy();
+    });
+
+    test.each(flows)('%s errors from an invalidated request do not replace the edited state', async (kind, endpoint, action) => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, kind);
+      const pending = delayPost(endpoint);
+      await wrapper.find(`[aria-label="${action}"]`).trigger('click');
+      await editFlow(wrapper, kind, true);
+      pending.reject(new Error('synthetic-private-network-error'));
+      await settle();
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(wrapper.vm.busy).toBe(false);
+      wrapper.destroy();
+    });
+
+    test.each(flows)('%s cannot republish a review after the component is destroyed', async (kind, endpoint, action) => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, kind);
+      const pending = delayPost(endpoint);
+      await wrapper.find(`[aria-label="${action}"]`).trigger('click');
+      wrapper.destroy();
+      pending.resolve(await pending.response());
+      await settle();
+      expect(wrapper.vm.preview).toBeNull();
+      expect(wrapper.vm.policyPreview).toBeNull();
+      expect(wrapper.vm.signedPolicyPreview).toBeNull();
+      expect(wrapper.vm.candidatePayload).toBe('{}');
+      expect(wrapper.vm.signedPolicyJson).toBe('');
+      expect(wrapper.vm.userPolicy.user_rules).toEqual([]);
+      expect(wrapper.vm.approvals).toEqual([]);
+      expect(request.get).not.toHaveBeenCalled();
+    });
+
+    test('a local policy request keeps the reviewed draft immutable while editing continues', async () => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, 'local policy');
+      const pending = delayPost('/0/egress/user-policy/diff');
+      await wrapper.find('[aria-label="Preview local policy diff"]').trigger('click');
+      await editFlow(wrapper, 'local policy', true);
+      expect(request.post.mock.calls[0][1].user_rules[0].pattern.value).toBe('password');
+      pending.resolve(await pending.response());
+      await settle();
+      wrapper.destroy();
+    });
+
+    test('refresh immediately removes reviews and prevents a pending preview from returning', async () => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, 'candidate');
+      const pending = delayPost('/0/egress/preview');
+      await wrapper.find('[aria-label="Preview sanitized request"]').trigger('click');
+      await wrapper.vm.refresh();
+      pending.resolve(await pending.response());
+      await settle();
+      expect(wrapper.find('[aria-label="Approve and send exact preview"]').exists()).toBe(false);
+      wrapper.destroy();
+    });
+
+    test.each(['resolve', 'reject'])('an older refresh cannot %s over the latest status', async outcome => {
+      const wrapper = await configuredWrapper();
+      const pending = deferred();
+      const original = request.get.getMockImplementation();
+      let delayed = false;
+      request.get.mockImplementation(url => {
+        if (url.endsWith('/status') && !delayed) { delayed = true; return pending.promise; }
+        return original(url);
+      });
+      const first = wrapper.vm.refresh();
+      await wrapper.vm.refresh();
+      if (outcome === 'resolve') pending.resolve({ data: { ...firewallStatus, outbound_enabled: false, kill_switch_enabled: true, policy_bundle_stored: false } });
+      else pending.reject(new Error('old refresh failed'));
+      await first;
+      await settle();
+      expect(wrapper.find('[role="status"]').text()).toContain('Outbound sending is available');
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(wrapper.vm.loading).toBe(false);
+      wrapper.destroy();
+    });
+
+    test('an edited request cannot continue sending after its approval returns', async () => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, 'candidate');
+      await wrapper.find('[aria-label="Preview sanitized request"]').trigger('click');
+      await settle();
+      const pending = delayPost('/0/egress/approve');
+      await wrapper.find('[aria-label="Approve and send exact preview"]').trigger('click');
+      await editFlow(wrapper, 'candidate', true);
+      pending.resolve(await pending.response());
+      await settle();
+      expect(request.post.mock.calls.filter(([url]) => url.endsWith('/send'))).toEqual([]);
+      expect(request.get).not.toHaveBeenCalled();
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      wrapper.destroy();
+    });
+
+    test.each([
+      ['scope', '#egress-approval-scope', 'time_limited', 'once'],
+      ['saved approval', '#egress-existing-approval', 'saved-approval', ''],
+    ])('changing %s away and back while approval waits still cancels sending', async (name, selector, changed, initial) => {
+      const wrapper = await configuredWrapper();
+      wrapper.vm.approvals = [{
+        schema_version: 1, approval_id: 'saved-approval', destination_id: 'sync-relay',
+        purpose_id: 'sync', retention_id: 'ephemeral', policy_version: 3,
+        scope: 'time_limited', expires_at: '2026-10-13T13:00:00Z', created_at: '2026-10-13T12:00:00Z',
+      }];
+      await editFlow(wrapper, 'candidate');
+      await wrapper.find('[aria-label="Preview sanitized request"]').trigger('click');
+      await settle();
+      const pending = delayPost('/0/egress/approve');
+      await wrapper.find('[aria-label="Approve and send exact preview"]').trigger('click');
+      const choice = wrapper.find(selector);
+      expect(choice.element.disabled).toBe(false);
+      const firstChange = choice.setValue(changed);
+      const secondChange = choice.setValue(initial);
+      await Promise.all([firstChange, secondChange]);
+      expect(wrapper.find('section[aria-labelledby="egress-preview-result-title"]').exists()).toBe(true);
+      pending.resolve(await pending.response());
+      await settle();
+      expect(request.post.mock.calls.filter(([url]) => url.endsWith('/send'))).toEqual([]);
+      expect(request.get).not.toHaveBeenCalled();
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(wrapper.vm.busy).toBe(false);
+      wrapper.destroy();
+    });
+
+    test('approval for one reviewed preview never sends a replacement preview', async () => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, 'candidate');
+      await wrapper.find('[aria-label="Preview sanitized request"]').trigger('click');
+      await settle();
+      const pending = delayPost('/0/egress/approve');
+      await wrapper.find('[aria-label="Approve and send exact preview"]').trigger('click');
+      wrapper.vm.preview = {
+        ...wrapper.vm.preview,
+        decision: { ...wrapper.vm.preview.decision, preview_id: 'replacement-preview', sanitized_payload: { app: 'Editor' } },
+      };
+      pending.resolve(await pending.response());
+      await settle();
+      expect(request.post.mock.calls.filter(([url]) => url.endsWith('/send'))).toEqual([]);
+      wrapper.destroy();
+    });
+
+    test('successful signed-policy acceptance refreshes the newly active policy', async () => {
+      const wrapper = await configuredWrapper();
+      await editFlow(wrapper, 'signed policy');
+      await wrapper.find('[aria-label="Preview signed policy changes"]').trigger('click');
+      await settle();
+      request.put.mockImplementation(() => {
+        registry = { ...registry, version: 4 };
+        firewallStatus = { ...firewallStatus, policy_bundle_version: 4 };
+        return Promise.resolve({});
+      });
+      await wrapper.find('[aria-label="Accept signed policy changes"]').trigger('click');
+      await settle();
+      expect(wrapper.vm.policy.version).toBe(4);
+      expect(wrapper.vm.status.policy_bundle_version).toBe(4);
+      expect(wrapper.vm.signedPolicyJson).toBe('');
+      expect(wrapper.vm.loading).toBe(false);
+      wrapper.destroy();
+    });
+
+    test.each([
+      ['local policy', 'Accept local policy changes', '/0/egress/user-policy/accept'],
+      ['signed policy', 'Accept signed policy changes', '/0/egress/policy/accept'],
+    ])('%s acceptance completion preserves a newer draft', async (kind, action, endpoint) => {
+      const wrapper = await configuredWrapper();
+      const flow = flows.find(([name]) => name === kind);
+      await editFlow(wrapper, kind);
+      await wrapper.find(`[aria-label="${flow[2]}"]`).trigger('click');
+      await settle();
+      const pending = deferred();
+      request.put.mockImplementation(url => url === endpoint ? pending.promise : Promise.resolve({}));
+      await wrapper.find(`[aria-label="${action}"]`).trigger('click');
+      await editFlow(wrapper, kind, true);
+      pending.resolve({});
+      await settle();
+      if (kind === 'local policy') {
+        expect(wrapper.find('[aria-label="Rule match 1"]').exists()).toBe(true);
+        expect(wrapper.find('[aria-label="Rule match 1"]').element.value).toBe('passcode');
+      }
+      else expect(wrapper.find('[aria-label="Signed policy bundle JSON"]').element.value).toContain('changed');
+      expect(request.get).not.toHaveBeenCalled();
+      wrapper.destroy();
+    });
+
+    test.each([
+      ['kill switch', 'toggleKillSwitch', '/0/egress/kill-switch'],
+      ['revoke approvals', 'revokeApprovals', '/0/egress/approvals'],
+    ])('%s completion cannot refresh a destroyed view', async (name, method, endpoint) => {
+      const wrapper = await configuredWrapper();
+      wrapper.vm.approvals = [{ approval_id: 'saved-approval' }];
+      const pending = deferred();
+      if (method === 'toggleKillSwitch') request.post.mockImplementation(url => url === endpoint ? pending.promise : Promise.resolve({}));
+      else request.delete.mockReturnValue(pending.promise);
+      const operation = wrapper.vm[method]();
+      wrapper.destroy();
+      pending.resolve({});
+      await operation;
+      await settle();
+      expect(request.get).not.toHaveBeenCalled();
+      expect(wrapper.vm.status).toBeNull();
+      expect(wrapper.vm.approvals).toEqual([]);
+    });
   });
 });

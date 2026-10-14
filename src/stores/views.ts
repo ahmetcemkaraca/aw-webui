@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { cloneDeep, isEqual } from 'lodash';
 import { useSettingsStore } from './settings';
 
 interface IElement {
@@ -73,13 +74,20 @@ export const defaultViews = !process.env.VUE_APP_ON_ANDROID ? desktopViews : and
 
 interface State {
   views: View[];
+  _savedPolicy: View[] | null;
+  _pendingPolicyWrites: number;
 }
 
 export const useViewsStore = defineStore('views', {
   state: (): State => ({
     views: [],
+    _savedPolicy: null,
+    _pendingPolicyWrites: 0,
   }),
   getters: {
+    hasPolicyDraft: state =>
+      state._pendingPolicyWrites > 0 ||
+      (state._savedPolicy !== null && !isEqual(state.views, state._savedPolicy)),
     getViewById: state => (id: string) => state.views.find(view => view.id === id),
   },
   actions: {
@@ -90,22 +98,28 @@ export const useViewsStore = defineStore('views', {
       this.loadViews(views);
     },
     async save() {
-      const settingsStore = useSettingsStore();
-      settingsStore.update({ views: this.views });
-      await this.load();
+      this._pendingPolicyWrites++;
+      try {
+        const saved = cloneDeep(this.views);
+        await useSettingsStore().update({ views: saved });
+        this._savedPolicy = cloneDeep(saved);
+      } finally {
+        this._pendingPolicyWrites--;
+      }
     },
     loadViews(views: View[]) {
-      this.$patch({ views });
+      this.$patch({ views: cloneDeep(views), _savedPolicy: cloneDeep(views) });
       console.log('Loaded views:', this.views);
     },
     clearViews(this: State) {
       this.views = [];
+      this._savedPolicy = null;
     },
     setElements(this: State, { view_id, elements }: { view_id: string; elements: IElement[] }) {
       this.views.find(v => v.id == view_id).elements = elements;
     },
     restoreDefaults(this: State) {
-      this.views = defaultViews;
+      this.views = cloneDeep(defaultViews);
     },
     addView(this: State, view: View) {
       this.views.push({ ...view, elements: [] });

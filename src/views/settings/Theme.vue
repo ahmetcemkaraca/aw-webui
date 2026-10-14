@@ -26,7 +26,7 @@ import 'vue-awesome/icons/sun';
 import 'vue-awesome/icons/moon';
 import { mapState } from 'pinia';
 import { useSettingsStore } from '~/stores/settings';
-import { detectPreferredTheme } from '~/util/theme';
+import { applyTheme } from '~/util/theme';
 
 export default {
   name: 'Theme',
@@ -53,22 +53,7 @@ export default {
           theme: value,
         });
 
-        // Determine the actual theme to apply
-        const detectedTheme = value === 'auto' ? detectPreferredTheme() : value;
-
-        // Apply newly set theme
-        // Create Dark Theme Element
-        const themeLink = document.createElement('link');
-        themeLink.href = '/dark.css';
-        themeLink.rel = 'stylesheet';
-
-        // Remove existing theme link if present
-        document.querySelector(`link[href="${new URL(themeLink.href).pathname}"]`)?.remove();
-
-        // Append Dark Theme Element if dark theme should be applied
-        if (detectedTheme === 'dark') {
-          document.querySelector('head').appendChild(themeLink);
-        }
+        applyTheme(value);
       },
     },
   },

@@ -47,6 +47,18 @@ export const useCaptureStore = defineStore('capture', {
     },
   },
   actions: {
+    async reloadPolicy(owned: () => Promise<boolean>): Promise<boolean> {
+      if (this.busy || this.pausing) return false;
+      const generation = ++this.generation;
+      try {
+        const response = await getClient().req.get('/0/capture/');
+        if (generation !== this.generation || this.busy || this.pausing || !await owned() || generation !== this.generation || this.busy || this.pausing) return false;
+        this.policy = response.data.policy;
+        this.recording = response.data.recording === true;
+        this.error = '';
+        return true;
+      } catch (_) { return false; }
+    },
     async load() {
       if (this.busy) return;
       const generation = this.generation;

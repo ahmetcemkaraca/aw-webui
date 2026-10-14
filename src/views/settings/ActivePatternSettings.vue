@@ -14,6 +14,7 @@ div
           code(style="background-color: rgba(200, 200, 200, 0.3); padding: 2px 4px; border-radius: 2px;")
             | Zoom Meeting|Google Meet|Microsoft Teams
     div
+      small.text-danger(v-if="patternError" role="alert") {{ patternError }}
       b-form-input(size="sm" v-model="always_active_pattern_editing" :state="(enabled || null) && valid")
       small.text-right
         div.text-success(v-if="enabled && valid") Enabled
@@ -24,6 +25,7 @@ div
 </template>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { isRegexBroad, validateRegex } from '~/util/validate';
 import { useSettingsStore } from '~/stores/settings';
 
@@ -33,6 +35,10 @@ export default {
     return {
       settingsStore: useSettingsStore(),
       always_active_pattern_editing: '',
+      savedPattern: '',
+      patternSaving: 0,
+      patternError: '',
+      unregisterPolicyDraft: null,
     };
   },
   computed: {
@@ -56,8 +62,7 @@ export default {
         return this.settingsStore.always_active_pattern;
       },
       set(value) {
-        console.log('Setting always_active_pattern to ' + value);
-        this.settingsStore.update({ always_active_pattern: value });
+        void this.savePattern(value);
       },
     },
   },
@@ -76,7 +81,21 @@ export default {
     },
   },
   mounted() {
-    this.always_active_pattern_editing = this.settingsStore.always_active_pattern;
+    this.savedPattern = this.settingsStore.always_active_pattern;
+    this.always_active_pattern_editing = this.savedPattern;
+    this.unregisterPolicyDraft = registerPolicyDraft(['settings.always_active_pattern'], {
+      blocked: () => this.patternSaving > 0 || this.always_active_pattern_editing !== this.savedPattern,
+      reload: async owned => { if (await owned()) { this.savedPattern = this.settingsStore.always_active_pattern; this.always_active_pattern_editing = this.savedPattern; } },
+    });
+  },
+  beforeDestroy() { this.unregisterPolicyDraft?.(); },
+  methods: {
+    async savePattern(value: string) {
+      this.patternSaving++; this.patternError = '';
+      try { await this.settingsStore.update({always_active_pattern:value}); this.savedPattern = value; }
+      catch (_) { this.patternError = 'The active pattern could not be saved.'; }
+      finally { this.patternSaving--; }
+    },
   },
 };
 </script>

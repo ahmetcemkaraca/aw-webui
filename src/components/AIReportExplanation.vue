@@ -29,7 +29,7 @@ section.mt-4(:aria-labelledby="idPrefix + '-title'")
     p.small.text-muted The response is untrusted text. Review it yourself; no action is applied automatically.
     b-button(variant="outline-secondary" size="sm" type="button" @click="saveResult" :disabled="store.busy || savedThisResult") {{ savedThisResult ? 'Saved in encrypted local history' : 'Save this result to encrypted local history' }}
   details.mt-3(v-if="showHistory")
-    summary Saved local AI history ({{ store.history.length }} / 50)
+    summary Saved AI results in Local Vault ({{ store.history.length }} / 50)
     p.small.text-muted Only results you explicitly save appear here. Questions and report aggregates are not saved. Remove a saved result at any time; saving the 51st result removes the first saved result.
     p.small.text-muted(v-if="!store.history.length") No saved AI results.
     article.border.rounded.p-2.mt-2(v-for="insight in store.history" :key="insight.insight_id")

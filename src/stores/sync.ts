@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { getClient, invokeAndroidNative } from '~/util/awclient';
+import { useBackupStore } from '~/stores/backups';
 
 const SYNC_PURPOSE_ID = 'sync-object-v1';
 
@@ -16,6 +17,7 @@ export interface SyncRestorePreview {
   query_start: string | null;
   query_end: string | null;
   policy_conflict_count: number;
+  policy_continuity_present: boolean;
 }
 
 export interface DevicePublicIdentity {
@@ -114,12 +116,6 @@ export const useSyncStore = defineStore('sync', {
     restorePreview: null as SyncRestorePreview | null,
     restoreAccepted: false,
     snapshotExport: '',
-    backupVersions: [] as Array<{
-      schema_version: number;
-      snapshot_id: string;
-      key_epoch: number;
-      object_count: number;
-    }>,
     syncEnabled: false,
     syncPreparing: false,
     baselineProgress: null as SyncBaselineProgress | null,
@@ -133,6 +129,7 @@ export const useSyncStore = defineStore('sync', {
   }),
   actions: {
     async run(command: string, args?: object): Promise<any | null> {
+      if (['rotate_sync_keys', 'revoke_sync_device', 'accept_sync_key_transfer', 'restore_sync_recovery_kit', 'create_sync_recovery_kit', 'create_current_sync_snapshot'].includes(command)) useBackupStore().clearSensitive();
       const operation = ++this.operation;
       this.busy = true;
       this.error = '';
@@ -170,8 +167,8 @@ export const useSyncStore = defineStore('sync', {
       try {
         const client = getClient().req;
         const [control, status] = await Promise.all([
-          client.get('/api/0/sync/enabled'),
-          client.get('/api/0/egress/status'),
+          client.get('/0/sync/enabled'),
+          client.get('/0/egress/status'),
         ]);
         this.syncEnabled = control.data.enabled === true;
         this.syncPreparing = control.data.preparing === true;
@@ -181,7 +178,7 @@ export const useSyncStore = defineStore('sync', {
         this.killSwitchEnabled = status.data.kill_switch_enabled !== false;
         this.syncDestinationAvailable = false;
         if (status.data.policy_bundle_stored && status.data.trusted_policy_keys > 0) {
-          const { data: policy } = await client.get('/api/0/egress/policy');
+          const { data: policy } = await client.get('/0/egress/policy');
           this.syncDestinationAvailable = (policy.purposes || []).some(
             (purpose: any) =>
               purpose.id === SYNC_PURPOSE_ID &&
@@ -210,11 +207,11 @@ export const useSyncStore = defineStore('sync', {
         const client = getClient().req;
         let request: Record<string, unknown> = { enabled };
         if (enabled) {
-          const { data: status } = await client.get('/api/0/egress/status');
+          const { data: status } = await client.get('/0/egress/status');
           if (!status.outbound_enabled || status.kill_switch_enabled) {
             throw new Error('Sync is blocked by the Privacy Firewall or its kill switch.');
           }
-          const { data: policy } = await client.get('/api/0/egress/policy');
+          const { data: policy } = await client.get('/0/egress/policy');
           const purpose = (policy.purposes || []).find(
             (item: any) => item.id === SYNC_PURPOSE_ID
           );
@@ -231,9 +228,12 @@ export const useSyncStore = defineStore('sync', {
             destination_id: destination.id,
             purpose_id: SYNC_PURPOSE_ID,
           };
-          if (!this.syncPreparing) await native('create_current_sync_snapshot');
+          if (!this.syncPreparing) {
+            useBackupStore().clearSensitive();
+            await native('create_current_sync_snapshot');
+          }
         }
-        const { data } = await client.post('/api/0/sync/enabled', request);
+        const { data } = await client.post('/0/sync/enabled', request);
         if (operation === this.operation) {
           this.syncEnabled = data.enabled === true;
           this.syncPreparing = data.preparing === true;
@@ -244,25 +244,6 @@ export const useSyncStore = defineStore('sync', {
         if (operation === this.operation) this.error = errorMessage(error);
       } finally {
         if (operation === this.operation) this.busy = false;
-      }
-    },
-    async exportSnapshot() {
-      const created = await this.run('create_current_sync_snapshot');
-      if (!created) return;
-      const snapshot = await this.run('export_sync_snapshot');
-      if (snapshot) {
-        this.snapshotExport = JSON.stringify(snapshot, null, 2);
-        this.backupVersions = [
-          {
-            schema_version: snapshot.schema_version,
-            snapshot_id: snapshot.snapshot_id,
-            key_epoch: snapshot.envelopes?.[0]?.key_epoch || 0,
-            object_count: snapshot.envelopes?.length || 0,
-          },
-        ];
-      } else if (!this.error) {
-        this.error =
-          'The encrypted activity snapshot is not available yet. Create it again after unlocking the vault.';
       }
     },
     async createLocalIdentity() {
@@ -400,6 +381,8 @@ export const useSyncStore = defineStore('sync', {
       }
     },
     async previewRecoveryRestore(kitJson: string, phrase: string, snapshotJson: string) {
+      this.invalidateRestorePreview();
+      const operation = this.operation + 1;
       try {
         const kit = parseJson(kitJson);
         const snapshot = parseJson(snapshotJson);
@@ -408,13 +391,22 @@ export const useSyncStore = defineStore('sync', {
           recoveryPhrase: phrase,
           snapshot,
         });
+        if (operation !== this.operation) return;
         if (preview) {
+          if (typeof preview.policy_continuity_present !== 'boolean' || !Number.isInteger(preview.policy_conflict_count) || preview.policy_conflict_count < 0 || preview.policy_conflict_count > 21)
+            throw new Error('The recovery policy metadata could not be verified.');
           this.restorePreview = preview;
           this.restoreAccepted = false;
         }
       } catch (error) {
-        this.error = errorMessage(error);
+        if (operation === this.operation) this.error = errorMessage(error);
       }
+    },
+    invalidateRestorePreview() {
+      this.operation++;
+      this.busy=false;
+      this.restorePreview=null;
+      this.restoreAccepted=false;
     },
     async acceptRecoveryRestore(
       kitJson: string,
@@ -423,15 +415,19 @@ export const useSyncStore = defineStore('sync', {
       userAccepted: boolean
     ) {
       if (!this.restorePreview || !userAccepted) return;
+      const reviewed = this.restorePreview;
+      const operation = this.operation + 1;
       try {
         const kit = parseJson(kitJson);
         const snapshot = parseJson(snapshotJson);
+        if (snapshot.snapshot_id !== reviewed.snapshot_id) throw new Error('The recovery snapshot changed. Preview it again before restoring.');
         const preview = await this.run('restore_sync_recovery_kit', {
           kit,
           recoveryPhrase: phrase,
           snapshot,
           userAccepted,
         });
+        if (operation !== this.operation) return;
         if (preview) {
           this.recoveryPreview = preview;
           this.recoveryPhrase = '';
@@ -476,7 +472,6 @@ export const useSyncStore = defineStore('sync', {
       this.restorePreview = null;
       this.restoreAccepted = false;
       this.snapshotExport = '';
-      this.backupVersions = [];
       this.pendingTombstones = [];
       this.recoveryRestored = false;
       this.invitation = '';

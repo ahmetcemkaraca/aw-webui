@@ -2,338 +2,357 @@
 div
   h3.mb-3 Work Time Report
 
-  div.row.mb-4
-    div.col-md-3
-      b-form-group(label="Hosts" label-class="font-weight-bold")
-        b-form-select(v-model="selectedHosts" :options="hostOptions" multiple :select-size="4" :disabled="loading")
-        small.text-muted Select devices to include
+  label.d-block.mb-3
+    | Report mode
+    select.form-control.w-auto(:value="reportMode" @change="changeReportMode($event.target.value)")
+      option(value="basic") Basic report (free)
+      option(value="advanced") Advanced reports
+  AdvancedReportPanel(v-if="reportMode === 'advanced'" :host-ids="managedHosts" :start-of-day="settingsStore.startOfDay")
+  div(v-show="reportMode === 'basic'")
+    div.row.mb-4
+      div.col-md-3
+        b-form-group(label="Hosts" label-class="font-weight-bold")
+          b-form-select(v-model="selectedHosts" :options="hostOptions" multiple :select-size="4" :disabled="loading" @input="invalidateManagedSelection")
+          small.text-muted Select devices to include
 
-    div.col-md-3
-      b-form-group(label="Categories" label-class="font-weight-bold")
-        b-form-select(
-          :value="''"
-          :options="addableCategoryOptions"
-          size="sm"
-          :disabled="loading"
-          @change="addCategory"
-        )
-        div.mt-2(v-if="selectedCategories.length > 0")
-          span.badge.badge-info.mr-1.mb-1(v-for="(cat, idx) in selectedCategories" :key="idx")
-            | {{ JSON.parse(cat).join(' > ') }}
-            button.ml-1.close.small(
-              type="button"
-              aria-label="Remove category"
-              style="font-size: 0.85rem; line-height: 1"
-              :disabled="loading"
-              @click="removeCategory(idx)"
-            ) &times;
-        small.text-muted.d-block.mt-1 Subcategories are included automatically (e.g. "Work" also covers "Work > Programming").
-
-    div.col-md-3
-      b-form-group(label="Break Time" label-class="font-weight-bold")
-        div.d-flex.align-items-center
-          b-form-input(
-            v-model="breakTime"
-            type="range"
-            min="0"
-            max="30"
-            step="1"
+      div.col-md-3
+        b-form-group(label="Categories" label-class="font-weight-bold")
+          b-form-select(
+            :value="''"
+            :options="addableCategoryOptions"
+            size="sm"
             :disabled="loading"
+            @change="addCategory"
           )
-          span.ml-2.text-nowrap {{ breakTime }} min
-        small.text-muted Gaps shorter than this will be counted as work time
+          div.mt-2(v-if="selectedCategories.length > 0")
+            span.badge.badge-info.mr-1.mb-1(v-for="(cat, idx) in selectedCategories" :key="idx")
+              | {{ JSON.parse(cat).join(' > ') }}
+              button.ml-1.close.small(
+                type="button"
+                aria-label="Remove category"
+                style="font-size: 0.85rem; line-height: 1"
+                :disabled="loading"
+                @click="removeCategory(idx)"
+              ) &times;
+          small.text-muted.d-block.mt-1 Subcategories are included automatically (e.g. "Work" also covers "Work > Programming").
 
-    div.col-md-3
-      b-form-group(label="Date Range" label-class="font-weight-bold")
-        b-form-select(v-model="dateRange" :options="dateRangeOptions" :disabled="loading")
+      div.col-md-3
+        b-form-group(label="Break Time" label-class="font-weight-bold")
+          div.d-flex.align-items-center
+            b-form-input(
+              v-model="breakTime"
+              type="range"
+              min="0"
+              max="30"
+              step="1"
+              :disabled="loading"
+            )
+            span.ml-2.text-nowrap {{ breakTime }} min
+          small.text-muted Gaps shorter than this will be counted as work time
 
-  div.mb-3
-    b-button(v-if="!loading" @click="loadData" variant="primary")
-      icon(name="sync")
-      |  Calculate Work Time
-    b-button(v-else @click="cancelCalculation" variant="outline-danger") Cancel request
-    b-button.ml-2(@click="exportCSV" variant="outline-secondary" :disabled="!hasData || loading")
-      icon(name="download")
-      |  Export CSV
-    b-button.ml-2(@click="exportJSON" variant="outline-secondary" :disabled="!hasData || loading")
-      icon(name="download")
-      |  Export JSON
-    label.small.d-inline-block.ml-2
-      input.mr-1(type="checkbox" v-model="includeRawEvents" :disabled="loading")
-      | Include raw event payloads in JSON export (titles, app names, and event fields)
-    p.small.text-muted.mt-2 CSV includes a machine-readable manifest row. JSON omits event payloads unless you opt in above.
+      div.col-md-3
+        b-form-group(label="Date Range" label-class="font-weight-bold")
+          b-form-select(v-model="dateRange" :options="dateRangeOptions" :disabled="loading")
 
-  div(v-if="loading")
-    b-spinner.mr-2
-    | Calculating locally...
+    div.mb-3
+      b-button(v-if="!loading" @click="loadData" variant="primary")
+        icon(name="sync")
+        |  Calculate Work Time
+      b-button(v-else @click="cancelCalculation" variant="outline-danger") Cancel request
+      b-button.ml-2(@click="exportCSV" variant="outline-secondary" :disabled="!hasData || loading")
+        icon(name="download")
+        |  Export CSV
+      b-button.ml-2(@click="exportJSON" variant="outline-secondary" :disabled="!hasData || loading")
+        icon(name="download")
+        |  Export JSON
+      b-button.ml-2(@click="printWorkReport" variant="outline-secondary" :disabled="!canPrintWorkReport") Print / save Work Report as PDF
+      label.small.d-inline-block.ml-2
+        input.mr-1(type="checkbox" v-model="includeRawEvents" :disabled="loading")
+        | Include raw event payloads in JSON export (titles, app names, and event fields)
+      p.small.text-muted.mt-2 CSV includes a machine-readable manifest row. JSON omits event payloads unless you opt in above.
+      p.small.text-muted Printing is free and includes the completed report's calculation details. Raw event payloads are excluded.
+      p.small(v-if="workReportPrinting" role="status" aria-live="polite") System print dialog requested. Choose Print or Save as PDF there, or cancel.
+      div.alert.alert-warning(v-if="workReportPrintError" role="alert") {{ workReportPrintError }}
 
-  div.alert.alert-info(v-if="!loading && calculationStatus === 'cancelled'" role="status") Calculation request cancelled. The previous report remains available.
-  div.alert.alert-warning(v-if="!loading && calculationStatus === 'limited'" role="status") {{ calculationMessage }}
-  div.alert.alert-danger(v-if="!loading && calculationError" role="alert") {{ calculationError }}
+    div(v-if="loading")
+      b-spinner.mr-2
+      | Calculating locally...
 
-  div(v-if="hasData && !loading")
-    div.alert.alert-info.mt-3(role="note" aria-label="Calculation method and data coverage")
-      p.mb-1 Calculation: {{ calculationManifest.method_id }} v{{ calculationManifest.method_version }}. Query duration plus adjacent gaps up to {{ calculationManifest.break_time_seconds }} seconds.
-      p.mb-1 {{ calculationManifest.coverage.periods_with_events }} of {{ calculationManifest.coverage.requested_periods }} periods contain events; {{ calculationManifest.coverage.events_seen }} events were evaluated.
-      p.mb-0 Coverage limit: {{ calculationManifest.coverage.limitation }}
-      p.mb-1(v-if="sourceCoverage") Source health is {{ sourceCoverage.source_health }}. Available sources: {{ sourceCoverage.available_source_buckets.length }}; queried sources: {{ sourceCoverage.queried_source_buckets.length }}.
-      p.mb-0(v-if="sourceCoverage")
-        | Timezone {{ sourceCoverage.timezone }}, local day starts at {{ calculationManifest.start_of_day }}. {{ sourceCoverage.partial_periods.length }} partial local-day periods: {{ sourceCoverage.partial_periods.join(', ') || 'none' }}. Clock skew: {{ sourceCoverage.clock_skew.status }}; correction bound {{ sourceCoverage.clock_skew.correction_bound_seconds }} seconds.
-      p.small.mb-1(v-if="sourceCoverage") Row limits: {{ sourceCoverage.source_row_limit }} per source bucket and {{ sourceCoverage.report_row_limit }} merged intervals per queried period.
-      p.small.text-warning.mb-1(v-if="sourceCoverage && sourceCoverage.limited_periods.length") Row cap reached in {{ sourceCoverage.limited_periods.join(', ') }}; those totals are incomplete.
-      details.mt-2(v-if="sourceCoverage")
-        summary Exact queried periods and sources
-        p.small.mt-2 Available: {{ sourceCoverage.available_source_buckets.join(', ') || 'none' }}
-        p.small Queried: {{ sourceCoverage.queried_source_buckets.join(', ') || 'none' }}
-        ul.small.mb-0
-          li(v-for="period in sourceCoverage.queried_periods" :key="period") {{ period }}
+    div.alert.alert-info(v-if="!loading && calculationStatus === 'cancelled'" role="status") Calculation request cancelled. The previous report remains available.
+    div.alert.alert-warning(v-if="!loading && calculationStatus === 'limited'" role="status") {{ calculationMessage }}
+    div.alert.alert-danger(v-if="!loading && calculationError" role="alert") {{ calculationError }}
 
-    div.alert.alert-secondary.mt-3(v-if="comparisonData" role="status" aria-label="Previous period comparison")
-      p.mb-1 {{ comparisonData.method_id }} v{{ comparisonData.method_version }}: {{ comparisonData.current.start_date }}–{{ comparisonData.current.end_date }} compared with {{ comparisonData.previous.start_date }}–{{ comparisonData.previous.end_date }}.
-      p.mb-1
-        | Work time {{ comparisonData.duration_change >= 0 ? 'increased' : 'decreased' }} by {{ formatDuration(Math.abs(comparisonData.duration_change)) }}
-        span(v-if="comparisonData.duration_change_percent !== null") ({{ comparisonData.duration_change_percent.toFixed(1) }}% vs previous period).
-        span(v-else) (percentage unavailable because previous work time was zero).
-      p.mb-0(v-if="comparisonData.coverage_note" role="note") {{ comparisonData.coverage_note }} Recorded event counts can differ because activity or capture availability changed; source health remains unknown.
-    div.alert.alert-light.mt-3(v-else-if="comparisonUnavailable" role="note") Comparison unavailable: an equal-length previous local-calendar window is not available.
+    div(v-if="hasData && !loading")
+      div.alert.alert-info.mt-3(role="note" aria-label="Calculation method and data coverage")
+        p.mb-1 Calculation: {{ calculationManifest.method_id }} v{{ calculationManifest.method_version }}. Query duration plus adjacent gaps up to {{ calculationManifest.break_time_seconds }} seconds.
+        p.mb-1 {{ calculationManifest.coverage.periods_with_events }} of {{ calculationManifest.coverage.requested_periods }} periods contain events; {{ calculationManifest.coverage.events_seen }} events were evaluated.
+        p.mb-0 Coverage limit: {{ calculationManifest.coverage.limitation }}
+        p.mb-1(v-if="sourceCoverage") Source health is {{ sourceCoverage.source_health }}. Available sources: {{ sourceCoverage.available_source_buckets.length }}; queried sources: {{ sourceCoverage.queried_source_buckets.length }}.
+        p.mb-0(v-if="sourceCoverage")
+          | Timezone {{ sourceCoverage.timezone }}, local day starts at {{ calculationManifest.start_of_day }}. {{ sourceCoverage.partial_periods.length }} partial local-day periods: {{ sourceCoverage.partial_periods.join(', ') || 'none' }}. Clock skew: {{ sourceCoverage.clock_skew.status }}; correction bound {{ sourceCoverage.clock_skew.correction_bound_seconds }} seconds.
+        p.small.mb-1(v-if="sourceCoverage") Row limits: {{ sourceCoverage.source_row_limit }} per source bucket and {{ sourceCoverage.report_row_limit }} merged intervals per queried period.
+        p.small.text-warning.mb-1(v-if="sourceCoverage && sourceCoverage.limited_periods.length") Row cap reached in {{ sourceCoverage.limited_periods.join(', ') }}; those totals are incomplete.
+        details.mt-2(v-if="sourceCoverage")
+          summary Exact queried periods and sources
+          p.small.mt-2 Available: {{ sourceCoverage.available_source_buckets.join(', ') || 'none' }}
+          p.small Queried: {{ sourceCoverage.queried_source_buckets.join(', ') || 'none' }}
+          ul.small.mb-0
+            li(v-for="period in sourceCoverage.queried_periods" :key="period") {{ period }}
 
-    AIReportExplanation(v-if="aiAggregate" id-prefix="work-report-ai" :aggregate="aiAggregate" :features="aiFeatures")
+      div.alert.alert-secondary.mt-3(v-if="comparisonData" role="status" aria-label="Previous period comparison")
+        p.mb-1 {{ comparisonData.method_id }} v{{ comparisonData.method_version }}: {{ comparisonData.current.start_date }}–{{ comparisonData.current.end_date }} compared with {{ comparisonData.previous.start_date }}–{{ comparisonData.previous.end_date }}.
+        p.mb-1
+          | Work time {{ comparisonData.duration_change >= 0 ? 'increased' : 'decreased' }} by {{ formatDuration(Math.abs(comparisonData.duration_change)) }}
+          span(v-if="comparisonData.duration_change_percent !== null") ({{ comparisonData.duration_change_percent.toFixed(1) }}% vs previous period).
+          span(v-else) (percentage unavailable because previous work time was zero).
+        p.mb-0(v-if="comparisonData.coverage_note" role="note") {{ comparisonData.coverage_note }} Recorded event counts can differ because activity or capture availability changed; source health remains unknown.
+      div.alert.alert-light.mt-3(v-else-if="comparisonUnavailable" role="note") Comparison unavailable: an equal-length previous local-calendar window is not available.
 
-    h5.mt-4 Daily Breakdown
+      AIReportExplanation(v-if="aiAggregate" id-prefix="work-report-ai" :aggregate="aiAggregate" :features="aiFeatures")
 
-    table.table.table-sm.table-hover
-      thead
-        tr
-          th Date
-          th.text-right Work Time
-          th.text-right Sessions
-          th.text-right Avg Session
-      tbody
-        tr(v-for="day in dailyData" :key="day.date")
-          td {{ day.date }}
-          td.text-right {{ formatDuration(day.duration) }}
-          td.text-right {{ day.sessions }}
-          td.text-right {{ formatDuration(day.avgSession) }}
-      tfoot
-        tr.font-weight-bold
-          td Total
-          td.text-right {{ formatDuration(totalDuration) }}
-          td.text-right {{ totalSessions }}
-          td.text-right {{ formatDuration(avgSessionLength) }}
+      h5.mt-4 Daily Breakdown
 
-    section.mt-4(v-if="freelancerAvailable" aria-labelledby="freelancer-timesheet-title")
-      h5#freelancer-timesheet-title Create an Approved Timesheet
-      p.small.text-muted This uses the current local Work Report result and selected categories. Only project alias, date, approved duration, and your optional note enter the artifact.
-      p.small.text-muted Project matches are explainable local category suggestions. Unmatched categories abstain; non-billable and inter-project gaps stay local.
-      b-alert(v-if="timesheetError" show variant="danger" role="alert") {{ timesheetError }}
-      section.mt-3(v-if="freelancerProjectOptions.length" aria-labelledby="ai-category-suggestion-title")
-        h6#ai-category-suggestion-title Optional AI category-to-project suggestion
-        b-form-checkbox(v-model="includeProjectLabels") Include local project labels in this exact AI request (otherwise only opaque aliases are sent)
-        AIReportExplanation(
-          id-prefix="category-ai"
-          :aggregate="aiCategoryAggregate"
-          title="AI category mapping suggestion"
-          default-question="Suggest possible mappings from the selected category labels to these project aliases. Return suggestions only; do not change rules."
-          :features="['category_suggestion']"
-          :show-history="false"
-        )
-      b-form-row
-        b-col(md="6")
-          b-form-group(label="Billable project and date" label-for="timesheet-line")
-            b-form-select#timesheet-line(v-model="selectedTimesheetLineKey" :options="timesheetLineOptions" :disabled="!timesheetLineOptions.length || loading")
-      b-alert(v-if="projectTimesheetSummary.error" show variant="danger" role="alert") {{ projectTimesheetSummary.error }}
-      p(v-if="selectedTimesheetLine" role="note") {{ timesheetMappingExplanation }}
-      p(v-if="projectTimesheetSummary.unmapped_duration_seconds" role="note") {{ formatDuration(projectTimesheetSummary.unmapped_duration_seconds) }} remains local because no project rule matched or rounding reduced it to zero.
-      p(v-if="projectTimesheetSummary.nonbillable_duration_seconds" role="note") {{ formatDuration(projectTimesheetSummary.nonbillable_duration_seconds) }} is mapped to non-billable projects and stays local.
-      section.mt-3(v-if="projectProfitabilityReport.rows.length || projectProfitabilityReport.error" aria-labelledby="project-profitability-title")
-        h6#project-profitability-title Local income and estimated project margin
-        p.small.text-muted Pre-tax totals for this report period. Costs include mapped billable and non-billable time; these are user-entered estimates, not accounting advice.
-        b-alert(v-if="projectProfitabilityReport.error" show variant="danger" role="alert") {{ projectProfitabilityReport.error }}
-        table.table.table-sm(v-if="projectProfitabilityReport.rows.length")
+      table.table.table-sm.table-hover
+        thead
+          tr
+            th Date
+            th.text-right Work Time
+            th.text-right Sessions
+            th.text-right Avg Session
+        tbody
+          tr(v-for="day in dailyData" :key="day.date")
+            td {{ day.date }}
+            td.text-right {{ formatDuration(day.duration) }}
+            td.text-right {{ day.sessions }}
+            td.text-right {{ formatDuration(day.avgSession) }}
+        tfoot
+          tr.font-weight-bold
+            td Total
+            td.text-right {{ formatDuration(totalDuration) }}
+            td.text-right {{ totalSessions }}
+            td.text-right {{ formatDuration(avgSessionLength) }}
+
+      section.mt-4(v-if="freelancerAvailable || timesheetPreview || signedClientReport || timesheetError" aria-labelledby="freelancer-timesheet-title")
+        h5#freelancer-timesheet-title Create an Approved Timesheet
+        b-alert(v-if="!freelancerAvailable" show variant="warning" role="status") New timesheets, signing and delivery require current Freelancer access. Existing artifacts remain available to export.
+        b-alert(v-if="timesheetError" show variant="danger" role="alert") {{ timesheetError }}
+        template(v-if="freelancerAvailable")
+          p.small.text-muted This uses the current local Work Report result and selected categories. Only project alias, date, approved duration, and your optional note enter the artifact.
+          p.small.text-muted Project matches are explainable local category suggestions. Unmatched categories abstain; non-billable and inter-project gaps stay local.
+          section.mt-3(v-if="freelancerProjectOptions.length" aria-labelledby="ai-category-suggestion-title")
+            h6#ai-category-suggestion-title Optional AI category-to-project suggestion
+            b-form-checkbox(v-model="includeProjectLabels") Include local project labels in this exact AI request (otherwise only opaque aliases are sent)
+            AIReportExplanation(
+              id-prefix="category-ai"
+              :aggregate="aiCategoryAggregate"
+              title="AI category mapping suggestion"
+              default-question="Suggest possible mappings from the selected category labels to these project aliases. Return suggestions only; do not change rules."
+              :features="['category_suggestion']"
+              :show-history="false"
+            )
+          b-form-row
+            b-col(md="6")
+              b-form-group(label="Billable project and date" label-for="timesheet-line")
+                b-form-select#timesheet-line(v-model="selectedTimesheetLineKey" :options="timesheetLineOptions" :disabled="!timesheetLineOptions.length || loading")
+          b-alert(v-if="projectTimesheetSummary.error" show variant="danger" role="alert") {{ projectTimesheetSummary.error }}
+          p(v-if="selectedTimesheetLine" role="note") {{ timesheetMappingExplanation }}
+          p(v-if="projectTimesheetSummary.unmapped_duration_seconds" role="note") {{ formatDuration(projectTimesheetSummary.unmapped_duration_seconds) }} remains local because no project rule matched or rounding reduced it to zero.
+          p(v-if="projectTimesheetSummary.nonbillable_duration_seconds" role="note") {{ formatDuration(projectTimesheetSummary.nonbillable_duration_seconds) }} is mapped to non-billable projects and stays local.
+          section.mt-3(v-if="projectProfitabilityReport.rows.length || projectProfitabilityReport.error" aria-labelledby="project-profitability-title")
+            h6#project-profitability-title Local income and estimated project margin
+            p.small.text-muted Pre-tax totals for this report period. Costs include mapped billable and non-billable time; these are user-entered estimates, not accounting advice.
+            b-alert(v-if="projectProfitabilityReport.error" show variant="danger" role="alert") {{ projectProfitabilityReport.error }}
+            table.table.table-sm(v-if="projectProfitabilityReport.rows.length")
+              thead
+                tr
+                  th Project alias
+                  th Billable time
+                  th Non-billable time
+                  th Income (minor units)
+                  th Cost (minor units)
+                  th Margin (minor units)
+              tbody
+                tr(v-for="row in projectProfitabilityReport.rows" :key="row.project_alias")
+                  td #[code {{ row.project_alias }}]
+                  td {{ formatDuration(row.billable_duration_seconds) }}
+                  td {{ formatDuration(row.nonbillable_duration_seconds) }}
+                  td {{ row.income_minor === null ? 'Rate not set' : row.income_minor + ' ' + row.currency_code }}
+                  td {{ row.cost_minor === null ? 'Cost not set' : row.cost_minor + ' ' + row.currency_code }}
+                  td {{ row.margin_minor === null ? 'Not calculated' : row.margin_minor + ' ' + row.currency_code }}
+            b-button(variant="outline-secondary" type="button" @click="exportProjectProfitabilityCsv") Export local totals CSV
+          p(v-if="freelancerProjectOptions.length && !timesheetLineOptions.length" role="status") No billable project-mapped time is available in this report period.
+          b-form-group(label="User note (optional)" label-for="timesheet-note")
+            b-form-textarea#timesheet-note(v-model="timesheetNote" maxlength="1000" rows="2" :disabled="loading")
+          b-form-group(label="Approved duration (seconds)" label-for="timesheet-duration")
+            b-form-input#timesheet-duration(v-model.number="timesheetDurationSeconds" type="number" min="1" max="86400" step="1" inputmode="numeric" :disabled="!selectedTimesheetLine || loading")
+          p(v-if="!freelancerProjectOptions.length" role="status") No local project is available. Add one in the Freelancer workspace when that capability is enabled.
+          b-button(variant="primary" type="button" @click="previewApprovedTimesheet" :disabled="!canPreviewTimesheet || timesheetLoading") {{ timesheetLoading ? 'Preparing exact preview…' : 'Preview Approved Timesheet' }}
+        section.mt-3(v-if="timesheetPreview" aria-labelledby="approved-timesheet-preview-title")
+          h6#approved-timesheet-preview-title Exact Approved Timesheet preview
+          p Project alias: #[code {{ timesheetPreview.timesheet.project_alias }}] · {{ timesheetPreview.timesheet.date }}
+          p(v-if="selectedTimesheetLine") Source duration: {{ formatDuration(selectedTimesheetLine.source_duration_seconds) }} · Approved duration: {{ formatDuration(timesheetPreview.timesheet.approved_duration_seconds) }} · Rounding: {{ selectedTimesheetLine.rounding_mode }}{{ selectedTimesheetLine.rounding_mode !== 'none' ? ' to ' + selectedTimesheetLine.rounding_increment_seconds + 's' : '' }}
+          AIReportExplanation(
+            v-if="freelancerAvailable"
+            id-prefix="timesheet-ai"
+            :aggregate="aiTimesheetAggregate"
+            title="Optional AI timesheet wording draft"
+            default-question="Draft neutral client-facing wording for this approved timesheet. Do not change its project alias, date or duration."
+            :features="['freelancer_draft']"
+            :show-history="false"
+          )
+          p SHA-256: #[code {{ timesheetPreview.artifact_sha256 }}]
+          pre(aria-label="Exact Approved Timesheet JSON") {{ timesheetPreview.artifact_json }}
+          b-button(variant="success" type="button" @click="exportApprovedTimesheet") Export approved timesheet
+          b-button.ml-2(variant="outline-primary" type="button" @click="signApprovedTimesheet" :disabled="!freelancerAvailable || timesheetSigning") {{ timesheetSigning ? 'Signing locally…' : 'Create signed client report' }}
+          b-alert.mt-2(v-if="timesheetSigningError" show variant="danger" role="alert") {{ timesheetSigningError }}
+          section.mt-2(v-if="signedClientReport" aria-labelledby="signed-client-report-title")
+            h6#signed-client-report-title Signed client report
+            p SHA-256: #[code {{ signedClientReport.artifact_sha256 }}]
+            p Device public key: #[code {{ signedClientReport.signer_public_key_ed25519 }}]
+            p Signature: #[code {{ signedClientReport.signature_ed25519 }}]
+            b-button(variant="outline-secondary" type="button" @click="exportSignedClientReport") Export signed report JSON
+            b-button.ml-2(variant="outline-secondary" type="button" @click="printSignedClientReport") Print / save as PDF
+            b-alert.mt-2(show variant="warning" role="note") This device signature verifies file integrity against its public key; the key is not identity-certified and this is not a legal signature or tax invoice.
+            article#approved-timesheet-print.timesheet-print-only(v-if="signedClientReport")
+              h1 PeakActivity Approved Timesheet
+              p Project alias: {{ signedClientReport.timesheet.project_alias }}
+              p Date: {{ signedClientReport.timesheet.date }}
+              p Approved duration: {{ formatDuration(signedClientReport.timesheet.approved_duration_seconds) }}
+              p(v-if="signedClientReport.timesheet.user_note") User note: {{ signedClientReport.timesheet.user_note }}
+              p SHA-256: {{ signedClientReport.artifact_sha256 }}
+              p Device public key: {{ signedClientReport.signer_public_key_ed25519 }}
+              p Ed25519 signature: {{ signedClientReport.signature_ed25519 }}
+              p Device key is not identity-certified. This report is not a legal signature or tax invoice.
+          details.mt-2
+            summary CSV preview
+            pre(aria-label="Approved Timesheet CSV") {{ approvedTimesheetCsv }}
+          b-button.mt-2(variant="outline-secondary" type="button" @click="exportApprovedTimesheetCsv") Export approved timesheet CSV
+          b-alert.mt-2(show variant="info" role="note") JSON and CSV exports save local files. Client delivery requires a separate trusted-policy preview and one-time approval.
+          section.mt-3(aria-labelledby="timesheet-egress-title")
+            h6#timesheet-egress-title Optional client delivery through Privacy Firewall
+            p.small.text-muted(v-if="timesheetEgressPolicyLoading" role="status") Checking for a trusted timesheet destination…
+            b-button(variant="outline-secondary" size="sm" type="button" @click="loadFreelancerEgressPolicy" :disabled="timesheetEgressPolicyLoading || timesheetEgressBusy") Refresh trusted policy and outbound status
+            b-alert(v-if="timesheetEgressPolicyError" show variant="warning" role="status") {{ timesheetEgressPolicyError }}
+            template(v-if="timesheetEgressOptions.length")
+              b-form-group(label="Signed timesheet destination" label-for="timesheet-egress-purpose")
+                b-form-select#timesheet-egress-purpose(v-model="selectedTimesheetEgressPurposeId" :options="timesheetEgressOptions" :disabled="timesheetEgressBusy")
+              p.small.text-muted(v-if="!timesheetEgressOutboundEnabled" role="status") Outbound sending is disabled by the local policy or kill switch. Local file export remains available.
+              b-button(variant="outline-primary" type="button" @click="previewTimesheetEgress" :disabled="!canPreviewTimesheetEgress || timesheetEgressBusy") Preview recipient, purpose, retention and exact payload
+            b-alert(v-if="timesheetEgressError" show variant="danger" role="alert") {{ timesheetEgressError }}
+            b-alert(v-if="timesheetEgressNotice" show variant="success" role="status") {{ timesheetEgressNotice }}
+            section.mt-2(v-if="timesheetEgressPreview" aria-labelledby="timesheet-egress-preview-title")
+              h6#timesheet-egress-preview-title Outbound request preview
+              p Recipient: {{ timesheetEgressPreview.destination_id }} — {{ timesheetEgressPreview.destination_origin || 'unregistered' }}
+              p Purpose: {{ timesheetEgressPreview.purpose_id }}
+              p Retention: {{ timesheetEgressPreview.retention_id }} — {{ timesheetEgressPreview.retention_disclosure || 'No matching retention disclosure' }}
+              p(role="status" aria-live="polite") Decision: {{ timesheetEgressPreview.decision.outcome }}{{ timesheetEgressPreview.decision.reason_codes.length ? ' — ' + timesheetEgressPreview.decision.reason_codes.join(', ') : '' }}
+              p(v-if="timesheetEgressPayloadExact") SHA-256 matches the approved timesheet: #[code {{ timesheetPreview.artifact_sha256 }}]
+              ul(v-if="timesheetEgressPreview.decision.removed_fields.length")
+                li(v-for="field in timesheetEgressPreview.decision.removed_fields" :key="field") Removed field: {{ field }}
+              pre(v-if="timesheetEgressPreview.decision.sanitized_payload" aria-label="Exact outbound payload") {{ JSON.stringify(timesheetEgressPreview.decision.sanitized_payload, null, 2) }}
+              b-alert(v-if="!timesheetEgressPayloadExact" show variant="warning" role="alert") The signed policy changes or removes timesheet fields. This preview cannot be sent as the approved artifact.
+              b-form-checkbox(v-model="timesheetEgressApprovalConfirmed" :disabled="!timesheetEgressPayloadExact || !timesheetEgressOutboundEnabled || timesheetEgressBusy") I approve sending this exact timesheet once to the displayed recipient for the displayed purpose and retention.
+              b-button.mt-2(variant="danger" type="button" @click="approveAndSendTimesheet" :disabled="!canSendTimesheetEgress || timesheetEgressBusy") {{ timesheetEgressBusy ? 'Sending…' : 'Approve once and send exact timesheet' }}
+          div(v-if="invoiceDraft")
+            h6 Local invoice draft
+            p Draft subtotal: {{ invoiceDraft.subtotal_minor }} {{ invoiceDraft.currency_code }} minor units. Tax is not calculated.
+            b-button(variant="outline-secondary" type="button" @click="exportInvoiceDraft") Export draft JSON
+
+      details.mt-4
+        summary Weekly and monthly totals
+        h6.mt-3 Weekly
+        table.table.table-sm.table-hover(v-if="weeklyData.length")
           thead
             tr
-              th Project alias
-              th Billable time
-              th Non-billable time
-              th Income (minor units)
-              th Cost (minor units)
-              th Margin (minor units)
+              th Week
+              th.text-right Days with events
+              th.text-right Sessions
+              th.text-right Work time
           tbody
-            tr(v-for="row in projectProfitabilityReport.rows" :key="row.project_alias")
-              td #[code {{ row.project_alias }}]
-              td {{ formatDuration(row.billable_duration_seconds) }}
-              td {{ formatDuration(row.nonbillable_duration_seconds) }}
-              td {{ row.income_minor === null ? 'Rate not set' : row.income_minor + ' ' + row.currency_code }}
-              td {{ row.cost_minor === null ? 'Cost not set' : row.cost_minor + ' ' + row.currency_code }}
-              td {{ row.margin_minor === null ? 'Not calculated' : row.margin_minor + ' ' + row.currency_code }}
-        b-button(variant="outline-secondary" type="button" @click="exportProjectProfitabilityCsv") Export local totals CSV
-      p(v-if="freelancerProjectOptions.length && !timesheetLineOptions.length" role="status") No billable project-mapped time is available in this report period.
-      b-form-group(label="User note (optional)" label-for="timesheet-note")
-        b-form-textarea#timesheet-note(v-model="timesheetNote" maxlength="1000" rows="2" :disabled="loading")
-      b-form-group(label="Approved duration (seconds)" label-for="timesheet-duration")
-        b-form-input#timesheet-duration(v-model.number="timesheetDurationSeconds" type="number" min="1" max="86400" step="1" inputmode="numeric" :disabled="!selectedTimesheetLine || loading")
-      p(v-if="!freelancerProjectOptions.length" role="status") No local project is available. Add one in the Freelancer workspace when that capability is enabled.
-      b-button(variant="primary" type="button" @click="previewApprovedTimesheet" :disabled="!canPreviewTimesheet || timesheetLoading") {{ timesheetLoading ? 'Preparing exact preview…' : 'Preview Approved Timesheet' }}
-      section.mt-3(v-if="timesheetPreview" aria-labelledby="approved-timesheet-preview-title")
-        h6#approved-timesheet-preview-title Exact Approved Timesheet preview
-        p Project alias: #[code {{ timesheetPreview.timesheet.project_alias }}] · {{ timesheetPreview.timesheet.date }}
-        p Source duration: {{ formatDuration(selectedTimesheetLine.source_duration_seconds) }} · Approved duration: {{ formatDuration(timesheetPreview.timesheet.approved_duration_seconds) }} · Rounding: {{ selectedTimesheetLine.rounding_mode }}{{ selectedTimesheetLine.rounding_mode !== 'none' ? ' to ' + selectedTimesheetLine.rounding_increment_seconds + 's' : '' }}
-        AIReportExplanation(
-          id-prefix="timesheet-ai"
-          :aggregate="aiTimesheetAggregate"
-          title="Optional AI timesheet wording draft"
-          default-question="Draft neutral client-facing wording for this approved timesheet. Do not change its project alias, date or duration."
-          :features="['freelancer_draft']"
-          :show-history="false"
-        )
-        p SHA-256: #[code {{ timesheetPreview.artifact_sha256 }}]
-        pre(aria-label="Exact Approved Timesheet JSON") {{ timesheetPreview.artifact_json }}
-        b-button(variant="success" type="button" @click="exportApprovedTimesheet") Export approved timesheet
-        b-button.ml-2(variant="outline-primary" type="button" @click="signApprovedTimesheet" :disabled="timesheetSigning") {{ timesheetSigning ? 'Signing locally…' : 'Create signed client report' }}
-        b-alert.mt-2(v-if="timesheetSigningError" show variant="danger" role="alert") {{ timesheetSigningError }}
-        section.mt-2(v-if="signedClientReport" aria-labelledby="signed-client-report-title")
-          h6#signed-client-report-title Signed client report
-          p SHA-256: #[code {{ signedClientReport.artifact_sha256 }}]
-          p Device public key: #[code {{ signedClientReport.signer_public_key_ed25519 }}]
-          p Signature: #[code {{ signedClientReport.signature_ed25519 }}]
-          b-button(variant="outline-secondary" type="button" @click="exportSignedClientReport") Export signed report JSON
-          b-button.ml-2(variant="outline-secondary" type="button" @click="printSignedClientReport") Print / save as PDF
-          b-alert.mt-2(show variant="warning" role="note") This device signature verifies file integrity against its public key; the key is not identity-certified and this is not a legal signature or tax invoice.
-          article#approved-timesheet-print.timesheet-print-only(v-if="signedClientReport")
-            h1 PeakActivity Approved Timesheet
-            p Project alias: {{ signedClientReport.timesheet.project_alias }}
-            p Date: {{ signedClientReport.timesheet.date }}
-            p Approved duration: {{ formatDuration(signedClientReport.timesheet.approved_duration_seconds) }}
-            p(v-if="signedClientReport.timesheet.user_note") User note: {{ signedClientReport.timesheet.user_note }}
-            p SHA-256: {{ signedClientReport.artifact_sha256 }}
-            p Device public key: {{ signedClientReport.signer_public_key_ed25519 }}
-            p Ed25519 signature: {{ signedClientReport.signature_ed25519 }}
-            p Device key is not identity-certified. This report is not a legal signature or tax invoice.
-        details.mt-2
-          summary CSV preview
-          pre(aria-label="Approved Timesheet CSV") {{ approvedTimesheetCsv }}
-        b-button.mt-2(variant="outline-secondary" type="button" @click="exportApprovedTimesheetCsv") Export approved timesheet CSV
-        b-alert.mt-2(show variant="info" role="note") JSON and CSV exports save local files. Client delivery requires a separate trusted-policy preview and one-time approval.
-        section.mt-3(aria-labelledby="timesheet-egress-title")
-          h6#timesheet-egress-title Optional client delivery through Privacy Firewall
-          p.small.text-muted(v-if="timesheetEgressPolicyLoading" role="status") Checking for a trusted timesheet destination…
-          b-button(variant="outline-secondary" size="sm" type="button" @click="loadFreelancerEgressPolicy" :disabled="timesheetEgressPolicyLoading || timesheetEgressBusy") Refresh trusted policy and outbound status
-          b-alert(v-if="timesheetEgressPolicyError" show variant="warning" role="status") {{ timesheetEgressPolicyError }}
-          template(v-if="timesheetEgressOptions.length")
-            b-form-group(label="Signed timesheet destination" label-for="timesheet-egress-purpose")
-              b-form-select#timesheet-egress-purpose(v-model="selectedTimesheetEgressPurposeId" :options="timesheetEgressOptions" :disabled="timesheetEgressBusy")
-            p.small.text-muted(v-if="!timesheetEgressOutboundEnabled" role="status") Outbound sending is disabled by the local policy or kill switch. Local file export remains available.
-            b-button(variant="outline-primary" type="button" @click="previewTimesheetEgress" :disabled="!canPreviewTimesheetEgress || timesheetEgressBusy") Preview recipient, purpose, retention and exact payload
-          b-alert(v-if="timesheetEgressError" show variant="danger" role="alert") {{ timesheetEgressError }}
-          b-alert(v-if="timesheetEgressNotice" show variant="success" role="status") {{ timesheetEgressNotice }}
-          section.mt-2(v-if="timesheetEgressPreview" aria-labelledby="timesheet-egress-preview-title")
-            h6#timesheet-egress-preview-title Outbound request preview
-            p Recipient: {{ timesheetEgressPreview.destination_id }} — {{ timesheetEgressPreview.destination_origin || 'unregistered' }}
-            p Purpose: {{ timesheetEgressPreview.purpose_id }}
-            p Retention: {{ timesheetEgressPreview.retention_id }} — {{ timesheetEgressPreview.retention_disclosure || 'No matching retention disclosure' }}
-            p(role="status" aria-live="polite") Decision: {{ timesheetEgressPreview.decision.outcome }}{{ timesheetEgressPreview.decision.reason_codes.length ? ' — ' + timesheetEgressPreview.decision.reason_codes.join(', ') : '' }}
-            p(v-if="timesheetEgressPayloadExact") SHA-256 matches the approved timesheet: #[code {{ timesheetPreview.artifact_sha256 }}]
-            ul(v-if="timesheetEgressPreview.decision.removed_fields.length")
-              li(v-for="field in timesheetEgressPreview.decision.removed_fields" :key="field") Removed field: {{ field }}
-            pre(v-if="timesheetEgressPreview.decision.sanitized_payload" aria-label="Exact outbound payload") {{ JSON.stringify(timesheetEgressPreview.decision.sanitized_payload, null, 2) }}
-            b-alert(v-if="!timesheetEgressPayloadExact" show variant="warning" role="alert") The signed policy changes or removes timesheet fields. This preview cannot be sent as the approved artifact.
-            b-form-checkbox(v-model="timesheetEgressApprovalConfirmed" :disabled="!timesheetEgressPayloadExact || !timesheetEgressOutboundEnabled || timesheetEgressBusy") I approve sending this exact timesheet once to the displayed recipient for the displayed purpose and retention.
-            b-button.mt-2(variant="danger" type="button" @click="approveAndSendTimesheet" :disabled="!canSendTimesheetEgress || timesheetEgressBusy") {{ timesheetEgressBusy ? 'Sending…' : 'Approve once and send exact timesheet' }}
-        div(v-if="invoiceDraft")
-          h6 Local invoice draft
-          p Draft subtotal: {{ invoiceDraft.subtotal_minor }} {{ invoiceDraft.currency_code }} minor units. Tax is not calculated.
-          b-button(variant="outline-secondary" type="button" @click="exportInvoiceDraft") Export draft JSON
+            tr(v-for="week in weeklyData" :key="week.period")
+              td {{ week.start_date }}–{{ week.end_date }}
+              td.text-right {{ week.days_with_events }} / {{ week.days }}
+              td.text-right {{ week.sessions }}
+              td.text-right {{ formatDuration(week.duration) }}
+        h6.mt-3 Monthly
+        table.table.table-sm.table-hover(v-if="monthlyData.length")
+          thead
+            tr
+              th Month
+              th.text-right Days with events
+              th.text-right Sessions
+              th.text-right Work time
+          tbody
+            tr(v-for="month in monthlyData" :key="month.period")
+              td {{ month.period }}
+              td.text-right {{ month.days_with_events }} / {{ month.days }}
+              td.text-right {{ month.sessions }}
+              td.text-right {{ formatDuration(month.duration) }}
 
-    details.mt-4
-      summary Weekly and monthly totals
-      h6.mt-3 Weekly
-      table.table.table-sm.table-hover(v-if="weeklyData.length")
-        thead
-          tr
-            th Week
-            th.text-right Days with events
-            th.text-right Sessions
-            th.text-right Work time
-        tbody
-          tr(v-for="week in weeklyData" :key="week.period")
-            td {{ week.start_date }}–{{ week.end_date }}
-            td.text-right {{ week.days_with_events }} / {{ week.days }}
-            td.text-right {{ week.sessions }}
-            td.text-right {{ formatDuration(week.duration) }}
-      h6.mt-3 Monthly
-      table.table.table-sm.table-hover(v-if="monthlyData.length")
-        thead
-          tr
-            th Month
-            th.text-right Days with events
-            th.text-right Sessions
-            th.text-right Work time
-        tbody
-          tr(v-for="month in monthlyData" :key="month.period")
-            td {{ month.period }}
-            td.text-right {{ month.days_with_events }} / {{ month.days }}
-            td.text-right {{ month.sessions }}
-            td.text-right {{ formatDuration(month.duration) }}
+      h5.mt-4 Activity summaries
+      p.small.text-muted Top 5 by duration; only fields present in the minimized local event data are summarized.
+      div.row
+        div.col-md-4
+          h6 Projects
+          ul(v-if="fieldSummaries.project.length")
+            li(v-for="item in fieldSummaries.project.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
+          p.small.text-muted(v-else) Project field unavailable.
+        div.col-md-4
+          h6 Applications
+          ul(v-if="fieldSummaries.app.length")
+            li(v-for="item in fieldSummaries.app.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
+          p.small.text-muted(v-else) Application field unavailable.
+        div.col-md-4
+          h6 Domains
+          ul(v-if="fieldSummaries.domain.length")
+            li(v-for="item in fieldSummaries.domain.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
+          p.small.text-muted(v-else) Domain field unavailable.
+      p.small.text-muted(v-if="fieldSummaries.active_away")
+        | Explicit status fields: active {{ formatDuration(fieldSummaries.active_away.active_duration) }}, away {{ formatDuration(fieldSummaries.active_away.away_duration) }}.
+      p.small.text-muted(v-else) Could not determine active/away time because explicit status was missing from part of the event set.
 
-    h5.mt-4 Activity summaries
-    p.small.text-muted Top 5 by duration; only fields present in the minimized local event data are summarized.
-    div.row
-      div.col-md-4
-        h6 Projects
-        ul(v-if="fieldSummaries.project.length")
-          li(v-for="item in fieldSummaries.project.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
-        p.small.text-muted(v-else) Project field unavailable.
-      div.col-md-4
-        h6 Applications
-        ul(v-if="fieldSummaries.app.length")
-          li(v-for="item in fieldSummaries.app.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
-        p.small.text-muted(v-else) Application field unavailable.
-      div.col-md-4
-        h6 Domains
-        ul(v-if="fieldSummaries.domain.length")
-          li(v-for="item in fieldSummaries.domain.slice(0, 5)" :key="item.label") {{ item.label }} — {{ formatDuration(item.duration) }}
-        p.small.text-muted(v-else) Domain field unavailable.
-    p.small.text-muted(v-if="fieldSummaries.active_away")
-      | Explicit status fields: active {{ formatDuration(fieldSummaries.active_away.active_duration) }}, away {{ formatDuration(fieldSummaries.active_away.away_duration) }}.
-    p.small.text-muted(v-else) Could not determine active/away time because explicit status was missing from part of the event set.
+      details.mt-4
+        summary Focus, context-switch, and meeting methods
+        h6.mt-3 Focus blocks
+        p.small.text-muted {{ focusBlocks.method_id }} v{{ focusBlocks.method_version }}; minimum block {{ focusBlocks.thresholds.minimum_duration_seconds }} seconds; short gaps up to {{ focusBlocks.thresholds.maximum_gap_seconds }} seconds stay inside a block.
+        p(v-if="focusBlocks.outcome === 'could_not_determine'") Could not determine: {{ focusBlocks.reason }}
+        template(v-else)
+          p {{ focusBlocks.intervals.length }} qualifying intervals; total {{ formatDuration(focusDuration) }}.
+          ul(v-if="focusBlocks.intervals.length")
+            li(v-for="interval in focusBlocks.intervals.slice(0, 20)" :key="interval.start") {{ interval.start }}–{{ interval.end }} ({{ formatDuration(interval.duration_seconds) }})
+          small.text-muted(v-if="focusBlocks.intervals.length > 20") Showing the first 20 intervals.
 
-    details.mt-4
-      summary Focus, context-switch, and meeting methods
-      h6.mt-3 Focus blocks
-      p.small.text-muted {{ focusBlocks.method_id }} v{{ focusBlocks.method_version }}; minimum block {{ focusBlocks.thresholds.minimum_duration_seconds }} seconds; short gaps up to {{ focusBlocks.thresholds.maximum_gap_seconds }} seconds stay inside a block.
-      p(v-if="focusBlocks.outcome === 'could_not_determine'") Could not determine: {{ focusBlocks.reason }}
-      template(v-else)
-        p {{ focusBlocks.intervals.length }} qualifying intervals; total {{ formatDuration(focusDuration) }}.
-        ul(v-if="focusBlocks.intervals.length")
-          li(v-for="interval in focusBlocks.intervals.slice(0, 20)" :key="interval.start") {{ interval.start }}–{{ interval.end }} ({{ formatDuration(interval.duration_seconds) }})
-        small.text-muted(v-if="focusBlocks.intervals.length > 20") Showing the first 20 intervals.
+        h6.mt-3 Context switches
+        p.small.text-muted {{ contextSwitches.method_id }} v{{ contextSwitches.method_version }}; app changes count only when the next event starts within {{ contextSwitches.thresholds.maximum_gap_seconds }} seconds.
+        p(v-if="contextSwitches.outcome === 'could_not_determine'") Could not determine: {{ contextSwitches.reason }}
+        template(v-else)
+          p {{ contextSwitches.intervals.length }} observed context switches.
+          ul(v-if="contextSwitches.intervals.length")
+            li(v-for="(interval, index) in contextSwitches.intervals.slice(0, 20)" :key="index") {{ interval.from_app }} → {{ interval.to_app }} at {{ interval.end }} ({{ interval.gap_seconds }} seconds)
+          small.text-muted(v-if="contextSwitches.intervals.length > 20") Showing the first 20 transitions.
 
-      h6.mt-3 Context switches
-      p.small.text-muted {{ contextSwitches.method_id }} v{{ contextSwitches.method_version }}; app changes count only when the next event starts within {{ contextSwitches.thresholds.maximum_gap_seconds }} seconds.
-      p(v-if="contextSwitches.outcome === 'could_not_determine'") Could not determine: {{ contextSwitches.reason }}
-      template(v-else)
-        p {{ contextSwitches.intervals.length }} observed context switches.
-        ul(v-if="contextSwitches.intervals.length")
-          li(v-for="(interval, index) in contextSwitches.intervals.slice(0, 20)" :key="index") {{ interval.from_app }} → {{ interval.to_app }} at {{ interval.end }} ({{ interval.gap_seconds }} seconds)
-        small.text-muted(v-if="contextSwitches.intervals.length > 20") Showing the first 20 transitions.
-
-      h6.mt-3 Meeting load
-      p.small.text-muted {{ meetingLoad.method_id }} v{{ meetingLoad.method_version }}; counts selected Meeting categories with intervals of at least {{ meetingLoad.thresholds.minimum_interval_seconds }} seconds. App names are not used to infer meetings.
-      p(v-if="meetingLoad.outcome === 'could_not_determine'") Could not determine: {{ meetingLoad.reason }}
-      template(v-else)
-        p {{ meetingLoad.intervals.length }} qualifying intervals; total {{ formatDuration(meetingLoad.duration_seconds) }}.
-        ul(v-if="meetingLoad.intervals.length")
-          li(v-for="interval in meetingLoad.intervals.slice(0, 20)" :key="interval.start") {{ interval.start }}–{{ interval.end }} ({{ formatDuration(interval.duration_seconds) }})
-        small.text-muted(v-if="meetingLoad.intervals.length > 20") Showing the first 20 intervals.
+        h6.mt-3 Meeting load
+        p.small.text-muted {{ meetingLoad.method_id }} v{{ meetingLoad.method_version }}; counts selected Meeting categories with intervals of at least {{ meetingLoad.thresholds.minimum_interval_seconds }} seconds. App names are not used to infer meetings.
+        p(v-if="meetingLoad.outcome === 'could_not_determine'") Could not determine: {{ meetingLoad.reason }}
+        template(v-else)
+          p {{ meetingLoad.intervals.length }} qualifying intervals; total {{ formatDuration(meetingLoad.duration_seconds) }}.
+          ul(v-if="meetingLoad.intervals.length")
+            li(v-for="interval in meetingLoad.intervals.slice(0, 20)" :key="interval.start") {{ interval.start }}–{{ interval.end }} ({{ formatDuration(interval.duration_seconds) }})
+          small.text-muted(v-if="meetingLoad.intervals.length > 20") Showing the first 20 intervals.
 
 </template>
 
 <script lang="ts">
 import { getClient } from '~/util/awclient';
 import AIReportExplanation from '~/components/AIReportExplanation.vue';
+import AdvancedReportPanel from '~/components/AdvancedReportPanel.vue';
+import { useReportStore } from '~/stores/reports';
 import { useCategoryStore } from '~/stores/categories';
 import { useSettingsStore } from '~/stores/settings';
 import { useBucketsStore } from '~/stores/buckets';
+import { useVaultStore } from '~/stores/vault';
+import { prepareWorkReportPrint } from '~/util/workReportPrint';
+import type { WorkReportPrintJob } from '~/util/workReportPrint';
 import {
   getSupportedWorkReportHosts,
   getWorkReportHostOptions,
@@ -371,7 +390,7 @@ import type {
 import 'vue-awesome/icons/sync';
 import 'vue-awesome/icons/download';
 import experience from '~/generated/product-experience.json';
-import { capability, isShipped } from '~/product/experience';
+import { capability } from '~/product/experience';
 import { hasFeatureEntitlement, loadNativeEntitlementStatus } from '~/util/entitlement';
 import {
   buildApprovedTimesheet,
@@ -425,12 +444,18 @@ interface TimesheetEgressPreviewV1 {
 
 export default {
   name: 'WorkReport',
-  components: { AIReportExplanation },
+  components: { AIReportExplanation, AdvancedReportPanel },
   data() {
     return {
+      reportMode: 'basic',
+      reportStore: useReportStore(),
       categoryStore: useCategoryStore(),
       settingsStore: useSettingsStore(),
       bucketsStore: useBucketsStore(),
+      vaultStore: useVaultStore(),
+      workReportPrintJob: null as WorkReportPrintJob | null,
+      workReportPrinting: false,
+      workReportPrintError: '',
 
       selectedHosts: [] as string[],
       selectedCategories: [JSON.stringify(['Work'])],
@@ -465,6 +490,7 @@ export default {
       calculationError: '',
       freelancerWorkspace: null as FreelancerWorkspaceV1 | null,
       freelancerEntitlementAvailable: false,
+      freelancerEntitlementRevision: 0,
       selectedTimesheetLineKey: '',
       timesheetDurationSeconds: 0,
       timesheetNote: '',
@@ -488,6 +514,7 @@ export default {
     };
   },
   computed: {
+    managedHosts() { return getSupportedWorkReportHosts(this.selectedHosts, this.bucketsStore.buckets || []); },
     hostOptions() {
       return getWorkReportHostOptions(this.bucketsStore.buckets || []);
     },
@@ -524,6 +551,10 @@ export default {
     },
     hasData() {
       return this.dailyData.length > 0;
+    },
+    canPrintWorkReport(): boolean {
+      return this.hasData && !this.loading && !this.workReportPrinting && !this.vaultStore.busy
+        && (!this.vaultStore.status || this.vaultStore.isReady);
     },
     totalDuration() {
       return this.dailyData.reduce((sum, day) => sum + day.duration, 0);
@@ -691,11 +722,11 @@ export default {
         );
     },
     canPreviewTimesheetEgress(): boolean {
-      return !!this.timesheetPreview && !!this.selectedTimesheetEgressPurpose
+      return this.freelancerAvailable && !!this.timesheetPreview && !!this.selectedTimesheetEgressPurpose
         && !!this.selectedTimesheetEgressDestination;
     },
     canSendTimesheetEgress(): boolean {
-      return this.timesheetEgressApprovalConfirmed && this.timesheetEgressOutboundEnabled
+      return this.freelancerAvailable && this.timesheetEgressApprovalConfirmed && this.timesheetEgressOutboundEnabled
         && this.timesheetEgressPayloadExact;
     },
     approvedTimesheetCsv(): string {
@@ -710,23 +741,25 @@ export default {
     },
   },
   async mounted() {
-    this.categoryStore.load();
+    try { this.categoryStore.load(); } catch (_) {
+      this.calculationError = 'Category settings are unavailable. Unlock the vault and retry.';
+    }
     await this.bucketsStore.ensureLoaded();
 
     if (this.hostOptions.length > 0) {
       this.selectedHosts = this.hostOptions.filter(opt => !opt.disabled).map(opt => opt.value);
     }
-    if (isShipped('freelancer-workspace', experience)) {
-      const entitlement = await loadNativeEntitlementStatus();
-      const freelancerCapability = capability('freelancer-workspace', experience);
-      this.freelancerEntitlementAvailable = hasFeatureEntitlement(
-        freelancerCapability?.status, entitlement, 'freelancer-workspace',
-      );
-      if (this.freelancerAvailable) await this.loadFreelancerWorkspace();
-      if (this.freelancerAvailable) await this.loadFreelancerEgressPolicy();
-    }
+    await this.refreshFreelancerEntitlement();
+    await this.loadFreelancerWorkspace();
+    if (this.freelancerAvailable) await this.loadFreelancerEgressPolicy();
+  },
+  beforeDestroy() {
+    this.reportStore.dispose();
+    this.clearWorkReportPrint();
   },
   watch: {
+    'vaultStore.isReady'(ready: boolean) { if (!ready) this.clearWorkReportPrint(); },
+    'vaultStore.busy'(busy: boolean) { if (busy) this.clearWorkReportPrint(); },
     selectedCategories: { handler() { this.clearTimesheetPreview(); }, deep: true },
     selectedHosts: { handler() { this.clearTimesheetPreview(); }, deep: true },
     dateRange() { this.clearTimesheetPreview(); },
@@ -740,11 +773,26 @@ export default {
     timesheetNote() { this.clearTimesheetPreview(); },
   },
   methods: {
+    invalidateManagedSelection() { this.reportStore.selectionChanged(); },
+    changeReportMode(value: string) {
+      this.queryController?.abort();this.clearWorkReportPrint();this.invalidateManagedSelection();this.reportMode=value;
+    },
+    async refreshFreelancerEntitlement(): Promise<boolean> {
+      const revision = ++this.freelancerEntitlementRevision;
+      const entitlement = await loadNativeEntitlementStatus();
+      if (revision !== this.freelancerEntitlementRevision) return false;
+      this.freelancerEntitlementAvailable = hasFeatureEntitlement(
+        capability('freelancer-workspace', experience)?.status,
+        entitlement, 'freelancer-workspace',
+      );
+      if (!this.freelancerAvailable) this.clearTimesheetEgressPreview();
+      return this.freelancerAvailable;
+    },
     cancelCalculation() {
       this.queryController?.abort();
     },
     async loadData() {
-      if (this.loading) return;
+      if (this.loading || this.reportMode === 'advanced') return;
       this.clearTimesheetPreview();
       this.loading = true;
       this.calculationStatus = '';
@@ -872,25 +920,7 @@ export default {
             startOfDay,
           }
         );
-        this.comparisonData = null;
-        this.comparisonUnavailable = false;
-        this.dailyData = calculation.daily;
-        this.calculationManifest = calculation.manifest;
-        this.weeklyData = aggregateDailyWorkReport(this.dailyData, 'week');
-        this.monthlyData = aggregateDailyWorkReport(this.dailyData, 'month');
-        this.fieldSummaries = summarizeWorkReportFields(this.dailyData);
-        this.focusBlocks = calculateFocusBlocks(this.dailyData);
-        this.contextSwitches = calculateContextSwitches(this.dailyData);
-        this.meetingLoad = calculateMeetingLoad(this.dailyData, categoriesFilter);
-        this.sourceCoverage = buildWorkReportSourceCoverage({
-          availableSourceBuckets,
-          queriedSourceBuckets,
-          queriedPeriods: timeperiods,
-          partialPeriods: windows.partial_periods,
-          limitedPeriods,
-          timezone,
-          deviceCount: hostsToQuery.length,
-        });
+        let comparisonData: WorkReportComparisonV1 | null = null;
         if (windows.previous) {
           const previous = calculateDailyWorkReport(
             windows.previous,
@@ -903,11 +933,30 @@ export default {
               startOfDay,
             }
           );
-          this.comparisonData = compareWorkReportPeriods(this.dailyData, previous.daily);
+          comparisonData = compareWorkReportPeriods(calculation.daily, previous.daily);
         }
-        this.comparisonUnavailable = !this.comparisonData;
-
-        this.rawData = currentResults;
+        Object.assign(this, {
+          dailyData: calculation.daily,
+          calculationManifest: calculation.manifest,
+          weeklyData: aggregateDailyWorkReport(calculation.daily, 'week'),
+          monthlyData: aggregateDailyWorkReport(calculation.daily, 'month'),
+          fieldSummaries: summarizeWorkReportFields(calculation.daily),
+          focusBlocks: calculateFocusBlocks(calculation.daily),
+          contextSwitches: calculateContextSwitches(calculation.daily),
+          meetingLoad: calculateMeetingLoad(calculation.daily, categoriesFilter),
+          sourceCoverage: buildWorkReportSourceCoverage({
+            availableSourceBuckets,
+            queriedSourceBuckets,
+            queriedPeriods: timeperiods,
+            partialPeriods: windows.partial_periods,
+            limitedPeriods,
+            timezone,
+            deviceCount: hostsToQuery.length,
+          }),
+          comparisonData,
+          comparisonUnavailable: !comparisonData,
+          rawData: currentResults,
+        });
         this.calculationStatus = limitedPeriods.length > 0 ? 'limited' : 'complete';
         if (limitedPeriods.length) {
           this.calculationMessage = `Some query periods reached an event-row cap (${limitedPeriods.join(
@@ -973,7 +1022,7 @@ export default {
       this.downloadFile(csv, 'work_time_report.csv', 'text/csv');
     },
 
-    exportJSON() {
+    buildReportExport(includeRawEvents: boolean) {
       const data = buildWorkReportJsonExport(
         {
           parameters: {
@@ -1002,11 +1051,37 @@ export default {
           daily: this.dailyData,
         },
         this.rawData,
-        this.includeRawEvents
+        includeRawEvents
       );
+      return data;
+    },
 
-      const json = JSON.stringify(data, null, 2);
+    exportJSON() {
+      const json = JSON.stringify(this.buildReportExport(this.includeRawEvents), null, 2);
       this.downloadFile(json, 'work_time_report.json', 'application/json');
+    },
+
+    printWorkReport() {
+      if (!this.canPrintWorkReport) return;
+      this.workReportPrintError = '';
+      try {
+        this.workReportPrintJob = prepareWorkReportPrint(this.buildReportExport(false), () => {
+          this.workReportPrinting = false;
+          this.workReportPrintJob = null;
+        });
+        this.workReportPrinting = true;
+        this.workReportPrintJob.print();
+      } catch (_) {
+        this.clearWorkReportPrint();
+        this.workReportPrintError = 'The system print dialog is unavailable. Use CSV or JSON export on this device.';
+      }
+    },
+
+    clearWorkReportPrint() {
+      const job = this.workReportPrintJob;
+      this.workReportPrintJob = null;
+      this.workReportPrinting = false;
+      job?.dispose();
     },
 
     clearTimesheetPreview() {
@@ -1026,7 +1101,6 @@ export default {
     },
 
     async loadFreelancerWorkspace() {
-      if (!this.freelancerAvailable) return;
       try {
         const response = await getClient().req.get('/0/freelancer/workspace');
         this.freelancerWorkspace = response.data as FreelancerWorkspaceV1;
@@ -1038,7 +1112,6 @@ export default {
     },
 
     async loadFreelancerEgressPolicy() {
-      if (!this.freelancerAvailable) return;
       this.clearTimesheetEgressPreview();
       this.timesheetEgressPolicyLoading = true;
       this.timesheetEgressPolicyError = '';
@@ -1065,13 +1138,17 @@ export default {
     },
 
     async previewApprovedTimesheet() {
-      const selectedProject = this.selectedTimesheetProject;
-      const selectedLine = this.selectedTimesheetLine;
-      if (!this.canPreviewTimesheet || !selectedProject || !selectedLine) return;
+      if (this.timesheetLoading) return;
       this.timesheetLoading = true;
       this.timesheetError = '';
-      this.clearTimesheetPreview();
       try {
+        if (!await this.refreshFreelancerEntitlement()) {
+          this.timesheetError = 'Preparing a new timesheet requires current Freelancer access. Your local input and existing artifacts are preserved.';
+          return;
+        }
+        const selectedProject = this.selectedTimesheetProject;
+        const selectedLine = this.selectedTimesheetLine;
+        if (!this.canPreviewTimesheet || !selectedProject || !selectedLine) return;
         const project = selectedProject;
         const timesheet = buildApprovedTimesheet({
           project_alias: project.project_alias,
@@ -1089,6 +1166,7 @@ export default {
             || serializedTimesheet !== expectedJson || preview.artifact_json !== expectedJson) {
           throw new Error('The approved preview changed. Recalculate and review it again.');
         }
+        this.clearTimesheetPreview();
         this.timesheetPreview = preview;
         this.invoiceDraft = project.hourly_rate_minor === null || project.currency_code === null
           ? null
@@ -1100,8 +1178,13 @@ export default {
               approved_duration_seconds: timesheet.approved_duration_seconds,
               hourly_rate_minor: project.hourly_rate_minor,
             });
-      } catch (_) {
-        this.timesheetError = 'The Approved Timesheet could not be prepared. No client or integration request was sent.';
+      } catch (error: any) {
+        if (error?.response?.status === 403) {
+          this.freelancerEntitlementRevision += 1;
+          this.freelancerEntitlementAvailable = false;
+          this.clearTimesheetEgressPreview();
+        }
+        this.timesheetError = 'The Approved Timesheet could not be prepared. Your local input and existing artifacts are preserved; no client or integration request was sent.';
       } finally {
         this.timesheetLoading = false;
       }
@@ -1110,10 +1193,14 @@ export default {
     async signApprovedTimesheet() {
       const preview = this.timesheetPreview;
       if (!preview || this.timesheetSigning) return;
-      this.signedClientReport = null;
       this.timesheetSigningError = '';
       this.timesheetSigning = true;
       try {
+        if (!await this.refreshFreelancerEntitlement()) {
+          this.timesheetSigningError = 'Signing requires current Freelancer access. Existing artifacts remain available to export.';
+          return;
+        }
+        if (this.timesheetPreview !== preview) return;
         const response = await getClient().req.post('/0/freelancer/timesheet/sign', preview.timesheet);
         const report = response.data as SignedClientReportV1;
         const hash = Array.from(new Uint8Array(await crypto.subtle.digest(
@@ -1127,8 +1214,13 @@ export default {
           throw new Error('The signed report does not match the approved preview.');
         }
         this.signedClientReport = report;
-      } catch (_) {
-        this.timesheetSigningError = 'The signed report could not be verified or saved in the local vault.';
+      } catch (error: any) {
+        if (error?.response?.status === 403) {
+          this.freelancerEntitlementRevision += 1;
+          this.freelancerEntitlementAvailable = false;
+          this.clearTimesheetEgressPreview();
+        }
+        this.timesheetSigningError = 'The signed report could not be verified or saved in the local vault. Existing artifacts remain available to export.';
       } finally {
         this.timesheetSigning = false;
       }
@@ -1144,7 +1236,8 @@ export default {
     },
 
     printSignedClientReport() {
-      if (!this.signedClientReport) return;
+      if (!this.signedClientReport || document.body.classList.contains('work-report-print-mode')
+          || document.body.classList.contains('timesheet-print-mode')) return;
       let fallback: number | undefined;
       const cleanup = () => {
         if (fallback !== undefined) window.clearTimeout(fallback);
@@ -1162,13 +1255,18 @@ export default {
     },
 
     async previewTimesheetEgress() {
-      const purpose = this.selectedTimesheetEgressPurpose;
-      const destination = this.selectedTimesheetEgressDestination;
-      if (!this.canPreviewTimesheetEgress || !purpose || !destination || !this.timesheetPreview) return;
-      this.clearTimesheetEgressPreview();
-      this.timesheetEgressNotice = '';
+      if (this.timesheetEgressBusy) return;
       this.timesheetEgressBusy = true;
       try {
+        if (!await this.refreshFreelancerEntitlement()) {
+          this.timesheetEgressError = 'Delivery requires current Freelancer access. The artifact stays local.';
+          return;
+        }
+        const purpose = this.selectedTimesheetEgressPurpose;
+        const destination = this.selectedTimesheetEgressDestination;
+        if (!this.canPreviewTimesheetEgress || !purpose || !destination || !this.timesheetPreview) return;
+        this.clearTimesheetEgressPreview();
+        this.timesheetEgressNotice = '';
         const response = await getClient().req.post('/api/0/egress/preview', {
           schema_version: 1,
           destination_id: destination.id,
@@ -1177,7 +1275,11 @@ export default {
           payload: this.timesheetPreview.timesheet,
         });
         this.timesheetEgressPreview = response.data as TimesheetEgressPreviewV1;
-      } catch (_) {
+      } catch (error: any) {
+        if (error?.response?.status === 403) {
+          this.freelancerEntitlementRevision += 1;
+          this.freelancerEntitlementAvailable = false;
+        }
         this.timesheetEgressError = 'The exact recipient and retention preview is unavailable. No request was sent.';
       } finally {
         this.timesheetEgressBusy = false;
@@ -1185,12 +1287,17 @@ export default {
     },
 
     async approveAndSendTimesheet() {
-      const preview = this.timesheetEgressPreview;
-      if (!this.canSendTimesheetEgress || !preview) return;
+      if (this.timesheetEgressBusy) return;
       this.timesheetEgressBusy = true;
       this.timesheetEgressError = '';
       this.timesheetEgressNotice = '';
       try {
+        if (!await this.refreshFreelancerEntitlement()) {
+          this.timesheetEgressError = 'Delivery requires current Freelancer access. The artifact stays local.';
+          return;
+        }
+        const preview = this.timesheetEgressPreview;
+        if (!this.canSendTimesheetEgress || !preview) return;
         const client = getClient().req;
         const approval = await client.post('/api/0/egress/approve', {
           preview_id: preview.decision.preview_id,
@@ -1203,7 +1310,11 @@ export default {
         });
         this.clearTimesheetEgressPreview();
         this.timesheetEgressNotice = 'The timesheet was sent once; the Privacy Firewall recorded a content-free receipt.';
-      } catch (_) {
+      } catch (error: any) {
+        if (error?.response?.status === 403) {
+          this.freelancerEntitlementRevision += 1;
+          this.freelancerEntitlementAvailable = false;
+        }
         this.clearTimesheetEgressPreview();
         this.timesheetEgressError = 'The send could not be confirmed. Check the Privacy Firewall receipt before retrying; no automatic retry was made.';
       } finally {

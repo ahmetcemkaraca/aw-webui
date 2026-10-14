@@ -21,6 +21,26 @@ test('correctly flatten hierarchy', () => {
   expect(result).toHaveLength(3);
 });
 
+test('category set merge preserves supplied priority without active IDs', () => {
+  const result = classes.mergeCategorySets([
+    {
+      id: 'primary',
+      categories: [{ name: ['Work'], rule: { type: 'regex', regex: '^Primary$' } }],
+    },
+    {
+      id: 'secondary',
+      categories: [
+        { name: ['Work'], rule: { type: 'regex', regex: '^Secondary$' } },
+        { name: ['Other'], rule: { type: 'none' } },
+      ],
+    },
+  ]);
+  expect(result).toEqual([
+    { name: ['Work'], rule: { type: 'regex', regex: '^Primary$' } },
+    { name: ['Other'], rule: { type: 'none' } },
+  ]);
+});
+
 test('matches string to category', () => {
   const cat = classes.matchString('subsubtest', testClasses);
   expect(cat).toEqual(testClasses[1]);

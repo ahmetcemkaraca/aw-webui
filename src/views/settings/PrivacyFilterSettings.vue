@@ -42,6 +42,7 @@ div
 </template>
 
 <script lang="ts">
+import { registerPolicyDraft } from '~/util/policyDrafts';
 import { useSettingsStore } from '~/stores/settings';
 import {
   DEFAULT_PRIVACY_FILTERS,
@@ -58,6 +59,7 @@ export default {
       savedText: '',
       saveError: '',
       isSaving: false,
+      unregisterPolicyDraft: null,
     };
   },
   computed: {
@@ -93,7 +95,12 @@ export default {
   },
   mounted() {
     this.syncFromStore(true);
+    this.unregisterPolicyDraft = registerPolicyDraft(['settings.privacy_filters'], {
+      blocked: () => this.hasUnsavedChanges || this.isSaving,
+      reload: async owned => { if (await owned()) this.syncFromStore(true); },
+    });
   },
+  beforeDestroy() { this.unregisterPolicyDraft?.(); },
   methods: {
     syncFromStore(overwriteEditor: boolean) {
       const serialized = formatPrivacyFilters(this.settingsStore.privacy_filters);

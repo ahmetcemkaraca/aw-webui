@@ -2,6 +2,7 @@ import {
   calculateDailyWorkReport,
   buildWorkReportQuery,
   buildWorkReportWindows,
+  buildManagedReportWindows,
   aggregateDailyWorkReport,
   compareWorkReportPeriods,
   summarizeWorkReportFields,
@@ -459,5 +460,35 @@ describe('Work Report limits and cancellation', () => {
       { query: ['RETURN = [];'], timeperiods: ['start/end'] },
       { signal: controller.signal }
     );
+  });
+});
+
+test('equal-duration field labels follow shared native UTF-16 ordering', () => {
+  const labels = ['é', '\uE000', '😀', 'z', 'A'];
+  const result = summarizeWorkReportFields([{ date: '2026-06-01', duration: 5, sessions: 5, avgSession: 1,
+    events: labels.map(app => ({ timestamp: '2026-06-01T12:00:00Z', duration: 1, data: { app } })) }]);
+  expect(result.app.map(row => row.label)).toEqual(['A', 'z', 'é', '😀', '\uE000']);
+});
+
+describe('managed report calendar windows',()=>{
+  test('offers the actual186 current days or93 plus93 comparison days',()=>{
+    expect(buildManagedReportWindows('2026-01-01','2026-07-05',false,'04:00').current).toHaveLength(186);
+    const pair=buildManagedReportWindows('2026-01-01','2026-04-03',true,'04:00');
+    expect(pair.current).toHaveLength(93);expect(pair.previous).toHaveLength(93);
+    expect(moment.parseZone(pair.previous![92].split('/')[1]).valueOf()).toBe(moment.parseZone(pair.current[0].split('/')[0]).valueOf());
+    expect(()=>buildManagedReportWindows('2026-01-01','2026-07-06',false,'04:00')).toThrow();
+    expect(()=>buildManagedReportWindows('2026-01-01','2026-04-04',true,'04:00')).toThrow();
+  });
+  test.each([['2026-02-30','2026-03-01','04:00'],['2026-03-02','2026-03-01','04:00'],['2026-03-01','2026-03-01','24:00'],['2026-03-01','2026-03-01','4:00']])('rejects invalid calendar inputs', (a,b,c)=>{
+    expect(()=>buildManagedReportWindows(a,b,false,c)).toThrow();
+  });
+  test('preserves spring/fall offsets and partial day-start windows',()=>{
+    const spring=buildManagedReportWindows('2026-03-29','2026-03-29',false,'00:00',moment('2026-03-29T12:00:00'));
+    const autumn=buildManagedReportWindows('2026-10-25','2026-10-25',false,'00:00',moment('2026-10-25T12:00:00'));
+    const hours=(period:string)=>{const [a,b]=period.split('/');return moment.parseZone(b).diff(moment.parseZone(a),'hours',true);};
+    expect(hours(spring.current[0])).toBe(23);expect(hours(autumn.current[0])).toBe(25);
+    const shifted=buildManagedReportWindows('2026-03-28','2026-03-29',false,'04:00',moment('2026-03-29T03:59:00'));
+    expect(hours(shifted.current[0])).toBe(23);expect(shifted.partial_periods).toEqual(['2026-03-28']);
+    expect(shifted.current[0]).toBe('2026-03-28T04:00:00+01:00/2026-03-29T04:00:00+02:00');
   });
 });

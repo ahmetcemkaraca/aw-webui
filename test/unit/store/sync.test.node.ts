@@ -26,6 +26,13 @@ describe('encrypted device pairing state', () => {
     delete (global as any).window;
   });
 
+  test('uses the client API base once for sync and Firewall status', async () => {
+    mockGet.mockResolvedValue({data:{enabled:false,outbound_enabled:false,kill_switch_enabled:true}});
+    await useSyncStore().refreshSyncControl();
+    expect(mockGet).toHaveBeenCalledWith('/0/sync/enabled');
+    expect(mockGet).toHaveBeenCalledWith('/0/egress/status');
+  });
+
   test('keeps only public identity and pairing messages in UI state', async () => {
     const store = useSyncStore();
     const device = {
@@ -167,36 +174,6 @@ describe('encrypted device pairing state', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'list_sync_devices');
   });
 
-  test('exports only the opaque encrypted snapshot from the native vault', async () => {
-    const store = useSyncStore();
-    const snapshot = {
-      schema_version: 1,
-      snapshot_id: 'opaque-snapshot',
-      envelopes: [{ ciphertext: 'encrypted-activity' }],
-    };
-    invoke
-      .mockResolvedValueOnce({
-        schema_version: 1,
-        key_epoch: 1,
-        snapshot_id: 'opaque-snapshot',
-        object_count: 1,
-      })
-      .mockResolvedValueOnce(snapshot);
-
-    await store.exportSnapshot();
-
-    expect(store.snapshotExport).toContain('encrypted-activity');
-    expect(store.backupVersions).toEqual([
-      {
-        schema_version: 1,
-        snapshot_id: 'opaque-snapshot',
-        key_epoch: 0,
-        object_count: 1,
-      },
-    ]);
-    expect(invoke).toHaveBeenNthCalledWith(1, 'create_current_sync_snapshot');
-    expect(invoke).toHaveBeenNthCalledWith(2, 'export_sync_snapshot');
-  });
 
   test('cancel clears public exchange data and cancels native ephemeral state', async () => {
     const store = useSyncStore();
@@ -230,7 +207,7 @@ describe('encrypted device pairing state', () => {
 
     await store.setSyncEnabled(true);
 
-    expect(mockPost).toHaveBeenNthCalledWith(1, '/api/0/sync/enabled', {
+    expect(mockPost).toHaveBeenNthCalledWith(1, '/0/sync/enabled', {
       enabled: true,
       destination_id: 'signed-relay',
       purpose_id: 'sync-object-v1',
@@ -239,7 +216,7 @@ describe('encrypted device pairing state', () => {
 
     mockPost.mockResolvedValueOnce({ data: { enabled: false } });
     await store.setSyncEnabled(false);
-    expect(mockPost).toHaveBeenLastCalledWith('/api/0/sync/enabled', { enabled: false });
+    expect(mockPost).toHaveBeenLastCalledWith('/0/sync/enabled', { enabled: false });
     expect(store.syncEnabled).toBe(false);
     expect(store.baselineProgress).not.toBeNull();
   });
@@ -325,6 +302,7 @@ describe('encrypted device pairing state', () => {
       query_start: '2026-01-01T00:00:00Z',
       query_end: '2026-01-02T00:00:00Z',
       policy_conflict_count: 0,
+      policy_continuity_present: false,
     };
     invoke.mockResolvedValueOnce(preview).mockResolvedValueOnce(preview);
 
@@ -359,5 +337,29 @@ describe('encrypted device pairing state', () => {
       userAccepted: true,
     });
     expect(store.recoveryRestored).toBe(true);
+  });
+  test('rejects unverified recovery policy metadata and removes a prior preview', async () => {
+    const store = useSyncStore(); store.restorePreview = {policy_conflict_count:0} as any;
+    invoke.mockResolvedValue({schema_version:1,policy_conflict_count:0});
+    await store.previewRecoveryRestore('{}','phrase','{}');
+    expect(store.restorePreview).toBeNull();expect(store.error).toContain('policy metadata');
+  });
+  test('editing recovery inputs invalidates a late preview even after the native call returns', async () => {
+    const store = useSyncStore();let finish!:(value:any)=>void;
+    invoke.mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+    const pending=store.previewRecoveryRestore('{}','phrase','{}');store.invalidateRestorePreview();
+    finish({schema_version:1,policy_conflict_count:2,policy_continuity_present:true});await pending;
+    expect(store.restorePreview).toBeNull();expect(store.restoreAccepted).toBe(false);
+  });
+  test('a changed snapshot cannot reuse a previous restore acknowledgement', async () => {
+    const store=useSyncStore();store.restorePreview={snapshot_id:'old'} as any;
+    await store.acceptRecoveryRestore('{}','phrase','{"snapshot_id":"new"}',true);
+    expect(invoke).not.toHaveBeenCalled();expect(store.error).toContain('snapshot changed');
+  });
+  test('vault cleanup between native result and caller publication cannot restore old UI status', async () => {
+    const store=useSyncStore();store.restorePreview={snapshot_id:'old'} as any;invoke.mockResolvedValue({snapshot_id:'old'});
+    const run=store.run; jest.spyOn(store,'run').mockImplementation(async (command,args)=>{const result=await run(command,args);store.clearSensitive();return result;});
+    await store.acceptRecoveryRestore('{}','phrase','{"snapshot_id":"old"}',true);
+    expect(store.recoveryRestored).toBe(false);expect(store.restorePreview).toBeNull();
   });
 });

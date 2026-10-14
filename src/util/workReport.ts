@@ -344,6 +344,36 @@ export function calculateMeetingLoad(
   };
 }
 
+export function buildManagedReportWindows(
+  startDate: string, endDate: string, comparePrevious: boolean, startOfDay: string,
+  now: moment.Moment = moment()
+): WorkReportWindowsV1 {
+  const start = moment(startDate, 'YYYY-MM-DD', true);
+  const end = moment(endDate, 'YYYY-MM-DD', true);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+    || !start.isValid() || !end.isValid() || end.isBefore(start) || !now.isValid()
+    || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(startOfDay)) {
+    throw new TypeError('Advanced Report dates or local day start are invalid.');
+  }
+  const count = end.diff(start, 'days') + 1;
+  if (count * (comparePrevious ? 2 : 1) > 186) {
+    throw new RangeError('Advanced Reports support 186 days, including comparison days.');
+  }
+  const periods = (first: moment.Moment) => Array.from({ length: count }, (_, index) => {
+    const date = first.clone().add(index, 'days');
+    return `${get_day_start_with_offset(date, startOfDay)}/${get_day_end_with_offset(date, startOfDay)}`;
+  });
+  const current = periods(start);
+  return {
+    current,
+    previous: comparePrevious ? periods(start.clone().subtract(count, 'days')) : null,
+    partial_periods: current.filter(period => {
+      const [a, b] = period.split('/');
+      return now.isAfter(moment.parseZone(a)) && now.isBefore(moment.parseZone(b));
+    }).map(period => period.slice(0, 10)),
+  };
+}
+
 export function buildWorkReportWindows(
   dateRange: string,
   startOfDay: string,
@@ -623,7 +653,7 @@ export function summarizeWorkReportFields(daily: DailyWorkReportV1[]): WorkRepor
   const rows = (values: Map<string, { duration: number; sessions: number }>) =>
     [...values.entries()]
       .map(([label, summary]) => ({ label, ...summary }))
-      .sort((a, b) => b.duration - a.duration || a.label.localeCompare(b.label));
+      .sort((a, b) => b.duration - a.duration || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
   return {
     method_id: WORK_REPORT_FIELD_SUMMARY_METHOD_ID,

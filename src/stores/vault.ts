@@ -33,12 +33,17 @@ export const useVaultStore = defineStore('vault', {
     },
   },
   actions: {
-    async refresh() {
+    async refresh(): Promise<VaultStatus | null> {
       try {
-        this.status = await native('vault_status');
-        if (this.status?.state === 'ready') this.error = '';
+        const status: VaultStatus = await native('vault_status');
+        this.status = status;
+        if (status?.state === 'ready') this.error = '';
+        return status;
       }
-      catch (_) { this.error = 'The vault status could not be read. Check the local app and data directory.'; }
+      catch (_) {
+        this.error = 'The vault status could not be read. Check the local app and data directory.';
+        return null;
+      }
     },
     async unlock() { await this.run('unlock_vault'); },
     async lock() {

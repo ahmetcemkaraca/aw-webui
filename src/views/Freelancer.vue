@@ -3,8 +3,8 @@ main.container.my-3
   h1 Freelancer workspace
   p Manage local project aliases and category mappings. Projects remain inside the encrypted Local Vault.
   b-alert(show variant="warning" role="status" v-if="!freelancerAvailable")
-    | Freelancer: {{ capabilityStatus }}. This workspace and all integrations are unavailable until the signed product catalog enables them.
-  template(v-else)
+    | Freelancer: {{ capabilityStatus }}. New projects and corrections require access. Existing settings remain available to read, export and remove.
+  template
     b-alert(v-if="loading" show variant="info" role="status") Loading local project settings…
     b-alert(v-if="error" show variant="danger" role="alert") {{ error }}
     b-alert(v-if="saveMessage" show variant="success" role="status") {{ saveMessage }}
@@ -61,11 +61,11 @@ main.container.my-3
           p.mb-1 Default billable: {{ project.billable_default ? 'Yes' : 'No' }}
           p.mb-1(v-if="project.hourly_rate_minor !== null") Local income rate: {{ project.hourly_rate_minor }} {{ project.currency_code }} minor units per hour.
           p.mb-2(v-if="project.hourly_cost_minor !== null") Local cost rate: {{ project.hourly_cost_minor }} {{ project.currency_code }} minor units per hour.
-          b-button.mr-2(size="sm" variant="outline-primary" type="button" @click="editProject(project.project_alias)") Edit project
+          b-button.mr-2(size="sm" variant="outline-primary" type="button" @click="editProject(project.project_alias)" :disabled="!freelancerAvailable") Edit project
           b-button(size="sm" variant="outline-danger" type="button" @click="removeProject(project.project_alias)") Remove project
 
     div.mt-3
-      b-button(variant="success" type="button" @click="saveWorkspace" :disabled="!dirty || saving || !freelancerAvailable")
+      b-button(variant="success" type="button" @click="saveWorkspace" :disabled="!dirty || saving || (!freelancerAvailable && !removalOnly)")
         | {{ saving ? 'Saving…' : 'Save local project settings' }}
       b-button.ml-2(variant="outline-secondary" type="button" @click="exportWorkspace" :disabled="!workspace.projects.length") Export local project settings
     p.small.text-muted.mt-3 No client or accounting integrations are configured. A category rule is a local suggestion; only a separately reviewed Approved Timesheet can be exported.
@@ -95,6 +95,7 @@ export default {
     return {
       categoryStore: useCategoryStore(),
       workspace: emptyWorkspace(),
+      savedWorkspace: null as FreelancerWorkspaceV1 | null,
       draft: {
         label: '',
         project_alias: '',
@@ -111,6 +112,7 @@ export default {
       loading: false,
       entitlementAvailable: false,
       entitlementCheckComplete: false,
+      entitlementRevision: 0,
       saving: false,
       dirty: false,
       error: '',
@@ -119,6 +121,16 @@ export default {
   },
   computed: {
     freelancerAvailable(): boolean { return this.entitlementAvailable; },
+    removalOnly(): boolean {
+      const saved = this.savedWorkspace;
+      if (!saved) return false;
+      const projects = saved.projects.filter(project => this.workspace.projects.some(item => item.project_alias === project.project_alias));
+      const rules = saved.category_rules.filter(rule => this.workspace.category_rules.some(item => JSON.stringify(item.category_path) === JSON.stringify(rule.category_path)));
+      return JSON.stringify(projects) === JSON.stringify(this.workspace.projects)
+        && JSON.stringify(rules) === JSON.stringify(this.workspace.category_rules)
+        && (projects.length < saved.projects.length || rules.length < saved.category_rules.length
+          || JSON.stringify(this.workspace) === JSON.stringify(saved));
+    },
     capabilityStatus(): string {
       if (!isShipped('freelancer-workspace', experience)) return statusLabel('freelancer-workspace', experience);
       if (!this.entitlementCheckComplete) return 'Checking local plan access';
@@ -163,21 +175,16 @@ export default {
     },
   },
   async mounted() {
-    const capabilityStatus = capability('freelancer-workspace', experience)?.status;
-    if (!isShipped('freelancer-workspace', experience)) {
-      this.entitlementCheckComplete = true;
-      return;
-    }
-    const entitlement = await loadNativeEntitlementStatus();
-    this.entitlementAvailable = hasFeatureEntitlement(capabilityStatus, entitlement, 'freelancer-workspace');
-    this.entitlementCheckComplete = true;
-    if (!this.freelancerAvailable) return;
     this.loading = true;
     this.error = '';
+    this.refreshFreelancerEntitlement();
+    this.categoryStore.load().catch(() => {
+      this.error = 'Category settings are unavailable. Existing projects can still be exported or removed.';
+    });
     try {
-      await this.categoryStore.load();
       const response = await getClient().req.get('/0/freelancer/workspace');
       this.workspace = response.data as FreelancerWorkspaceV1;
+      this.savedWorkspace = JSON.parse(JSON.stringify(this.workspace)) as FreelancerWorkspaceV1;
     } catch (_) {
       this.error = 'Local Freelancer settings are unavailable. Unlock the vault and retry.';
     } finally {
@@ -185,6 +192,17 @@ export default {
     }
   },
   methods: {
+    async refreshFreelancerEntitlement(): Promise<boolean> {
+      const revision = ++this.entitlementRevision;
+      const entitlement = await loadNativeEntitlementStatus();
+      if (revision !== this.entitlementRevision) return false;
+      this.entitlementAvailable = hasFeatureEntitlement(
+        capability('freelancer-workspace', experience)?.status,
+        entitlement, 'freelancer-workspace',
+      );
+      this.entitlementCheckComplete = true;
+      return this.freelancerAvailable;
+    },
     newAlias(prefix: 'project' | 'client' = 'project'): string {
       const bytes = new Uint8Array(16);
       crypto.getRandomValues(bytes);
@@ -194,7 +212,11 @@ export default {
       return this.workspace.category_rules.filter(rule => rule.project_alias === alias)
         .map(rule => rule.category_path.join(' > ')).join(', ');
     },
-    editProject(alias: string) {
+    async editProject(alias: string) {
+      if (!await this.refreshFreelancerEntitlement()) {
+        this.error = 'Project corrections require current Freelancer access. Your local input is preserved.';
+        return;
+      }
       const project = this.workspace.projects.find(item => item.project_alias === alias);
       if (!project) return;
       this.editingProjectAlias = alias;
@@ -223,7 +245,11 @@ export default {
         rounding_mode: 'nearest', rounding_increment_seconds: 900,
       };
     },
-    addProject() {
+    async addProject() {
+      if (!await this.refreshFreelancerEntitlement()) {
+        this.error = 'New projects and corrections require current Freelancer access. Your local input is preserved.';
+        return;
+      }
       if (!this.canAddProject) return;
       const projectAlias = this.draft.project_alias.trim();
       if (!this.editingProjectAlias && this.workspace.projects.some(project => project.project_alias === projectAlias)) {
@@ -274,20 +300,31 @@ export default {
       this.saveMessage = '';
     },
     async saveWorkspace() {
-      if (!this.dirty || this.saving || !this.freelancerAvailable) return;
+      if (!this.dirty || this.saving || !this.savedWorkspace) return;
       this.saving = true;
       this.error = '';
-      const expectedRevision = this.workspace.revision;
       try {
+        if (!this.removalOnly && !await this.refreshFreelancerEntitlement()) {
+          this.error = 'Saving project corrections requires current Freelancer access. Your unsaved settings are preserved.';
+          return;
+        }
+        const expectedRevision = this.workspace.revision;
         const response = await getClient().req.put('/0/freelancer/workspace', {
           expected_revision: expectedRevision,
           workspace: { ...this.workspace, revision: expectedRevision },
         });
         this.workspace = response.data as FreelancerWorkspaceV1;
+        this.savedWorkspace = JSON.parse(JSON.stringify(this.workspace)) as FreelancerWorkspaceV1;
         this.dirty = false;
         this.saveMessage = 'Local project settings saved in the encrypted vault.';
       } catch (error: any) {
-        this.error = error?.response?.status === 409
+        if (error?.response?.status === 403) {
+          this.entitlementRevision += 1;
+          this.entitlementAvailable = false;
+        }
+        this.error = error?.response?.status === 403
+          ? 'Saving these settings was denied. Your unsaved settings are preserved; existing projects can still be exported or removed.'
+          : error?.response?.status === 409
           ? 'Project settings changed elsewhere. Reload before saving.'
           : 'Project settings were not saved. Unlock the vault and retry.';
       } finally {

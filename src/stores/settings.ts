@@ -5,7 +5,9 @@ import { Category, CategorySet, defaultCategories, cleanCategory } from '~/util/
 import { SavedQuery } from '~/util/savedQueries';
 import { View, defaultViews } from '~/stores/views';
 import type { PrivacyFilterRule } from '~/util/privacyFilters';
-import { isEqual } from 'lodash';
+import { cloneDeep, isEqual } from 'lodash';
+import { POLICY_FIELDS, type PolicyField } from '~/util/policyContracts';
+import { applyTheme } from '~/util/theme';
 
 function jsonEq(a: any, b: any) {
   const jsonA = JSON.parse(JSON.stringify(a));
@@ -69,10 +71,11 @@ interface State {
 
   // Set to true if settings loaded
   _loaded: boolean;
+  _pendingPolicyWrites: number;
 }
 
-export const useSettingsStore = defineStore('settings', {
-  state: (): State => ({
+function defaultSettings(): State {
+  return {
     initialTimestamp: moment(),
 
     startOfDay: '04:00',
@@ -103,10 +106,10 @@ export const useSettingsStore = defineStore('settings', {
 
     always_active_pattern: '',
     privacy_filters: [],
-    classes: defaultCategories,
+    classes: cloneDeep(defaultCategories),
     category_sets: [],
     active_set_ids: ['default'],
-    views: defaultViews,
+    views: cloneDeep(defaultViews),
     saved_queries: [],
     ignoredCategorySuggestions: [],
 
@@ -119,7 +122,12 @@ export const useSettingsStore = defineStore('settings', {
     rawRetentionDays: 0,
 
     _loaded: false,
-  }),
+    _pendingPolicyWrites: 0,
+  };
+}
+
+export const useSettingsStore = defineStore('settings', {
+  state: defaultSettings,
 
   getters: {
     loaded(state: State) {
@@ -210,61 +218,109 @@ export const useSettingsStore = defineStore('settings', {
         console.error('Settings not loaded, not saving');
         return;
       }
-      // We want to avoid saving to localStorage to not accidentally mess up pre-migration data
-      // For example, if the user is using several browsers, and opened in their non-main browser on first run after upgrade.
-      const saveToLocalStorage = false;
+      this._pendingPolicyWrites++;
+      try {
+        // We want to avoid saving to localStorage to not accidentally mess up pre-migration data
+        // For example, if the user is using several browsers, and opened in their non-main browser on first run after upgrade.
+        const saveToLocalStorage = false;
 
-      // Save to localStorage and backend
-      // NOTE: localStorage deprecated, will be removed in future
-      const client = getClient();
+        // Save to localStorage and backend
+        // NOTE: localStorage deprecated, will be removed in future
+        const client = getClient();
 
-      // Fetch current settings from server
-      const server_settings = await client.get_settings();
+        // Fetch current settings from server
+        const server_settings = await client.get_settings();
 
-      // Save settings
-      for (const key of Object.keys(this.$state)) {
-        // Skip keys starting with underscore, as they are local to the vuex store.
-        if (key.startsWith('_')) {
-          continue;
-        }
-
-        const value = this.$state[key];
-
-        // Save to localStorage
-        // NOTE: we always save the theme and landingpage to localStorage, since they are used before the settings are loaded
-        if (saveToLocalStorage || key == 'theme' || key == 'landingpage') {
-          if (typeof value === 'object') {
-            localStorage.setItem(key, JSON.stringify(value));
-          } else {
-            localStorage.setItem(key, value);
-          }
-        }
-
-        // Save changed settings to backend
-        if (server_settings[key] === undefined || !jsonEq(server_settings[key], value)) {
-          if (server_settings[key] === undefined && value === false) {
-            // Skip saving settings that are set to false and not already saved on the server
+        // Save settings
+        for (const key of Object.keys(this.$state)) {
+          // Skip keys starting with underscore, as they are local to the vuex store.
+          if (key.startsWith('_')) {
             continue;
           }
-          console.log('Saving', { [key]: value });
-          //console.log('Was:', server_settings[key]);
-          //console.log('Now:', value);
-          await client.req.post('/0/settings/' + key, value, {
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
+
+          const value = this.$state[key];
+
+          // Save to localStorage
+          // NOTE: we always save the theme and landingpage to localStorage, since they are used before the settings are loaded
+          if (saveToLocalStorage || key == 'theme' || key == 'landingpage') {
+            if (typeof value === 'object') {
+              localStorage.setItem(key, JSON.stringify(value));
+            } else {
+              localStorage.setItem(key, value);
+            }
+          }
+
+          // Save changed settings to backend
+          if (server_settings[key] === undefined || !jsonEq(server_settings[key], value)) {
+            if (server_settings[key] === undefined && value === false) {
+              // Skip saving settings that are set to false and not already saved on the server
+              continue;
+            }
+            console.log('Saving', { [key]: value });
+            //console.log('Was:', server_settings[key]);
+            //console.log('Now:', value);
+            await client.req.post('/0/settings/' + key, value, {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+          }
+        }
+
+        // After save, reload
+        await this.load({ save: false });
+      } finally {
+        this._pendingPolicyWrites--;
+      }
+    },
+    async reloadPolicy(field: PolicyField, owned: () => Promise<boolean>): Promise<boolean> {
+      if (!POLICY_FIELDS.includes(field) || !field.startsWith('settings.')) return false;
+      if (
+        !this.loaded ||
+        this._pendingPolicyWrites ||
+        !(await owned()) ||
+        this._pendingPolicyWrites
+      )
+        return false;
+      const data = await getClient().get_settings();
+      if (this._pendingPolicyWrites || !(await owned()) || this._pendingPolicyWrites) return false;
+      if (!data || typeof data !== 'object' || Array.isArray(data))
+        throw new Error('Settings could not be reloaded.');
+      const categoryFields = [
+        'settings.classes',
+        'settings.category_sets',
+        'settings.active_set_ids',
+      ];
+      const fields = categoryFields.includes(field) ? categoryFields : [field];
+      const defaults = defaultSettings();
+      const patch: Record<string, unknown> = {};
+      for (const scope of fields) {
+        const key = scope.slice('settings.'.length);
+        patch[key] = cloneDeep(
+          Object.prototype.hasOwnProperty.call(data, key) ? data[key] : defaults[key]
+        );
+      }
+      this.$patch(patch);
+      if (typeof localStorage !== 'undefined') {
+        for (const key of Object.keys(patch)) {
+          localStorage.removeItem(key);
+          if (['theme', 'landingpage', 'useColorFallback'].includes(key))
+            localStorage.setItem(key, String(patch[key]));
         }
       }
-
-      // After save, reload
-      await this.load({ save: false });
+      if (field === 'settings.theme') applyTheme(this.theme);
+      return true;
     },
     async update(new_state: Record<string, any>) {
-      console.log('Updating state', new_state);
-      await this.ensureLoaded();
-      this.$patch(new_state);
-      await this.save();
+      this._pendingPolicyWrites++;
+      try {
+        console.log('Updating state', new_state);
+        await this.ensureLoaded();
+        this.$patch(new_state);
+        await this.save();
+      } finally {
+        this._pendingPolicyWrites--;
+      }
     },
   },
 });
